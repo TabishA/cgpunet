@@ -2,8 +2,6 @@
 from keras.layers import *
 import math
 
-#TODO: for all conv layers kernel_initializer = 'he_normal'
-
 
 # addition: if channel numbers can be broadcasted, add layers and return.
 # else increase the number of channels in the smaller feature map by 1x1 convolution -> batchnorm (add_mode='conv')
