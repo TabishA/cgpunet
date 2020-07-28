@@ -243,10 +243,15 @@ def cgp_2_dag(net_list, mirror=False):
                 G.add_node(node, num_channels=init_num_channels, pool_factor=0, id=i)
                 pool_factor = 0
                 num_channels = 1
-            elif op == 'S': # S_ConvBlock or S_ResBlock
+            elif sub_elements[1] == 'ConvBlock':
                 num_channels = get_data(G, node, 'num_channels')
                 pool_factor = G.nodes[in_node]['pool_factor']
                 G.add_node(node, num_channels=num_channels, pool_factor=pool_factor, id=i)
+            elif sub_elements[1] == 'ResBlock':
+                num_channels = get_data(G, node, 'num_channels')
+                in_ch = G.nodes[in_node]['num_channels']
+                pool_factor = G.nodes[in_node]['pool_factor']
+                G.add_node(node, num_channels= max(num_channels, in_ch), pool_factor=pool_factor, id=i)
             elif op == 'Max' or op == 'Avg': # Max_Pool or Avg_Pool
                 num_channels = G.nodes[in_node]['num_channels']
                 pool_factor += 1
