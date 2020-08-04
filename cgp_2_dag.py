@@ -36,7 +36,7 @@ def get_function(node):
 
 def get_data(G, incoming_node, field):
     elems = incoming_node.split('_')
-    if (re.search("^ConvBlock.*", elems[1]) or re.search("^ResBlock.*", elems[1])) and field == 'num_channels':
+    if (re.search("^ConvBlock.*", elems[1]) or re.search("^ResBlock.*", elems[1]) or re.search("^DeconvBlock.*", elems[1])) and field == 'num_channels':
         return elems[2]
     else:
         data = list(G.in_edges(incoming_node, data=True))
@@ -93,27 +93,30 @@ def append_output_layers(G, out_channels = 1, mirror=False):
         leaf_channels = int(G.nodes[leaf]['num_channels'])
         leaf_pool_factor = int(G.nodes[leaf]['pool_factor'])
 
-        assert(leaf_pool_factor >= 0)
-
         #if output shape is already equal to desired shape, don't append any layers
         while leaf_pool_factor != 0 or leaf_channels != out_channels:
             node_list = list(G.nodes())
             if leaf_pool_factor == 0: #append conv1x1
                 out_node = 'S_ConvBlock_' + str(out_channels) + '_1_' + str(leaf_id) + '_' + str(leaf_id)
                 G.add_node(out_node, num_channels=out_channels, pool_factor=0, id=leaf_id+1)
-                G.add_edge(node_list[leaf_id], out_node, num_channels = leaf_channels, pool_factor = leaf_pool_factor)
 
                 leaf_channels = out_channels
-                leaf_id = leaf_id + 1
-            else: #append DeconvBlock
+                
+            elif leaf_pool_factor > 0: #append DeconvBlock
                 ch = int(leaf_channels/2) if int(leaf_channels/2) > out_channels else out_channels
                 out_node = 'D_DeconvBlock_' + str(leaf_channels) + '_2_' + str(leaf_id) + '_' + str(leaf_id)
                 G.add_node(out_node, num_channels=ch, pool_factor=leaf_pool_factor-1, id=leaf_id+1)
-                G.add_edge(node_list[leaf_id], out_node, num_channels = leaf_channels, pool_factor = leaf_pool_factor)
-                    
-                leaf_id = leaf_id + 1
+
                 leaf_pool_factor = leaf_pool_factor - 1
                 leaf_channels = ch
+            else:
+                out_node = 'Max_Pool_' + str(leaf_id) + '_' + str(leaf_id)
+                G.add_node(out_node, num_channels = leaf_channels, pool_factor = leaf_pool_factor + 1, id = leaf_id + 1)
+
+                leaf_pool_factor += 1
+                
+            G.add_edge(node_list[leaf_id], out_node, num_channels = leaf_channels, pool_factor = leaf_pool_factor)
+            leaf_id += 1
 
         return G
     
@@ -131,7 +134,7 @@ def update_edges(G):
 
     return G
 
-
+#TODO: add case for DeconvBlock
 def combine(G, Gr):
     mapping = dict()
     final_index = 2*len(Gr) - 1
@@ -252,6 +255,10 @@ def cgp_2_dag(net_list, mirror=False):
                 in_ch = G.nodes[in_node]['num_channels']
                 pool_factor = G.nodes[in_node]['pool_factor']
                 G.add_node(node, num_channels= max(int(num_channels), int(in_ch)), pool_factor=pool_factor, id=i)
+            elif sub_elements[1] == 'DeconvBlock':
+                num_channels = get_data(G, node, 'num_channels')
+                pool_factor = pool_factor - 1
+                G.add_node(node, num_channels=num_channels, pool_factor=pool_factor, id=i)
             elif op == 'Max' or op == 'Avg': # Max_Pool or Avg_Pool
                 num_channels = G.nodes[in_node]['num_channels']
                 pool_factor += 1
@@ -314,3 +321,38 @@ def draw_dag(G, save_to_dir=None):
     else:
         plt.figure()
         plt.savefig(save_to_dir)
+
+
+def dag_2_vec(G, input_size = (128,128)):
+    vec = []
+    depth = nx.shortest_path_length(G, 'input_0_0')
+    for node in G.nodes():
+        node_dict = G.nodes[node]
+        pf = node_dict['pool_factor']
+        x = input_size[0]*(2*pf)
+        y = input_size[1]*(2*pf)
+        vec.append([int(node_dict['num_channels']), x, y, depth[node]])
+
+    return vec
+
+
+def cosine_similarity(G1, G2):
+    v1 = dag_2_vec(G1)
+    v2 = dag_2_vec(G2)
+
+    similarity = np.zeros((len(v1), len(v2)))
+
+    for i in range(similarity.shape[0]):
+        for j in range(similarity.shape[1]):
+            c_sim = np.dot(v1[i], v2[j])/(np.linalg.norm(v1[i])*np.linalg.norm(v2[j]))
+            similarity[i][j] = c_sim
+
+    
+    a = 0 if len(v2) > len(v1) else 1
+
+    max_sim = np.max(similarity, axis=a)
+    sum_max_sim = np.sum(max_sim) + abs(len(v1) - len(v2))
+
+    norm_sum = sum_max_sim/max(len(v1), len(v2))
+
+    return norm_sum

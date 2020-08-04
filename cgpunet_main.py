@@ -30,6 +30,6 @@ eval_f = CNNEvaluation(gpu_num=4, dataset_path=dir_name, img_format='*.tif', mas
 
 #CGP object contains a population of 4 individuals
 #TEST: lam=1
-cgp = CGP(network_info, eval_f, max_eval=100, lam=4, imgSize=128, init=False)
+cgp = CGP(network_info, eval_f, max_eval=100, pop_size=4, lam=4, imgSize=128, init=False)
 cgp.modified_evolution(mutation_rate=0.1)
 

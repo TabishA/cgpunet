@@ -69,7 +69,7 @@ def traverse(dag, successor, modules):
 
 
 #TODO: test if tf.device('/gpu:{}') actually works
-def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1)):
+def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1), pretrained_weights = None):
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpuID)
     nodes = list(dag.nodes())
     
@@ -99,5 +99,7 @@ def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1)):
         model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy', metrics.Precision(), metrics.Recall(), metrics.TruePositives(), metrics.TrueNegatives(), metrics.FalsePositives(), metrics.FalseNegatives(), metrics.AUC()])
         #model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
         
+        if pretrained_weights:
+            model.load_weights(pretrained_weights)
 
     return model

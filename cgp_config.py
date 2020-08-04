@@ -13,7 +13,10 @@ def cnn_eval(args):
 
     print('\tgpu_id:', gpu_id, ',', dag)
     train = cnn.CNN_train(dataset_path, img_format, mask_format, verbose=verbose, input_shape=input_shape, target_shape=target_shape, batchsize=batchsize, batchsize_valid=batchsize_valid)
-    evaluation = train(dag, gpu_id, epoch_num=epoch_num, out_model=out_model)
+    try:
+        evaluation = train(dag, gpu_id, epoch_num=epoch_num, out_model=out_model)
+    except:
+        evaluation = 0
     print('\tgpu_id:', gpu_id, ', eval:', evaluation)
     return evaluation
 
@@ -32,17 +35,23 @@ class CNNEvaluation(object):
         self.mask_format = mask_format
         self.out_model = out_model
 
-    def __call__(self, DAG_list, epochs, gen_num):
+    def __call__(self, DAG_list, epochs, gen_num, retrain = False):
         evaluations = np.zeros(len(DAG_list))
+        out_model_names = []
         for i in np.arange(0, len(DAG_list), self.gpu_num):
             process_num = np.min((i + self.gpu_num, len(DAG_list))) - i
-            
-            assert(self.epoch_num >= epochs)
 
             args = []
 
             for j in range(process_num):
-                args.append((DAG_list[i+j], j, epochs, self.batchsize, self.batchsize_valid, self.dataset_path, self.img_format, self.mask_format, self.input_shape, self.target_shape, self.out_model + '_' + str(gen_num) + '_' + str(j) + '.hdf5', self.verbose))
+                if not retrain:
+                    out_model = self.out_model + '_' + str(gen_num) + '_' + str(j) + '.hdf5'
+                else:
+                    assert(isinstance(gen_num[i + j], str))
+                    out_model = gen_num[i + j]
+                
+                out_model_names.append(out_model)
+                args.append((DAG_list[i+j], j, epochs[i + j], self.batchsize, self.batchsize_valid, self.dataset_path, self.img_format, self.mask_format, self.input_shape, self.target_shape, out_model, self.verbose))
 
             with concurrent.futures.ProcessPoolExecutor(max_workers=self.gpu_num - 1) as executor:
                 results = executor.map(cnn_eval, args)
@@ -50,7 +59,7 @@ class CNNEvaluation(object):
             for k, r in enumerate(results):
                 evaluations[i + k] = r
         
-        return evaluations
+        return evaluations, out_model_names
 
 
 
@@ -76,8 +85,18 @@ class CgpInfoConvSet(object):
                           'S_ResBlock_32_1',     'S_ResBlock_32_3',    'S_ResBlock_32_5',
                           'S_ResBlock_128_1',     'S_ResBlock_128_3',    'S_ResBlock_128_5',
                           'S_ResBlock_64_1',      'S_ResBlock_64_3',     'S_ResBlock_64_5',
-                          'Concat', 'Sum',
-                          'Max_Pool', 'Avg_Pool']
+                          'S_ResBlock_256_1',      'S_ResBlock_256_3',     'S_ResBlock_256_5',
+                          'S_ResBlock_512_1',      'S_ResBlock_512_3',     'S_ResBlock_512_5',
+                          'S_ResBlock_1024_1',      'S_ResBlock_1024_3',     'S_ResBlock_1024_5',
+                          'D_DeconvBlock_1_1', 'D_DeconvBlock_2_1', 'D_DeconvBlock_4_1', 'D_DeconvBlock_8_1', 'D_DeconvBlock_16_1', 'D_DeconvBlock_32_1', 'D_DeconvBlock_1_3', 'D_DeconvBlock_2_3', 'D_DeconvBlock_4_3', 'D_DeconvBlock_8_3', 'D_DeconvBlock_16_3','D_DeconvBlock_32_3',
+                          'D_DeconvBlock_1_5', 'D_DeconvBlock_2_5', 'D_DeconvBlock_4_5', 'D_DeconvBlock_8_5', 'D_DeconvBlock_16_5', 'D_DeconvBlock_32_5',
+                          'D_DeconvBlock_128_1',    'D_DeconvBlock_128_3',   'D_DeconvBlock_128_5',
+                          'D_DeconvBlock_64_1',     'D_DeconvBlock_64_3',    'D_DeconvBlock_64_5',
+                          'D_DeconvBlock_256_1',     'D_DeconvBlock_256_3',    'D_DeconvBlock_256_5',
+                          'D_DeconvBlock_512_1',     'D_DeconvBlock_512_3',    'D_DeconvBlock_512_5',
+                          'D_DeconvBlock_1024_1',     'D_DeconvBlock_1024_3',    'D_DeconvBlock_1024_5',
+                          'Concat', 'Sum', 'Concat', 'Sum', 'Concat', 'Sum', 'Concat', 'Sum', 'Concat', 'Sum', 'Concat', 'Sum', 'Concat', 'Sum', 'Concat', 'Sum',
+                          'Max_Pool', 'Avg_Pool', 'Max_Pool', 'Avg_Pool', 'Max_Pool', 'Avg_Pool', 'Max_Pool', 'Avg_Pool', 'Max_Pool', 'Avg_Pool', 'Max_Pool', 'Avg_Pool', 'Max_Pool', 'Avg_Pool', 'Max_Pool', 'Avg_Pool']
                           
         self.func_in_num = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                           1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -85,8 +104,14 @@ class CgpInfoConvSet(object):
                           1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                           1,     1,    1,
                           1,  1,     1,
-                          2, 2,
-                          1, 1]
+                          1,  1,     1,
+                          1,  1,     1,
+                          1,  1,     1,
+                          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                          1,  1,     1,
+                          2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+                          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 
         self.out_num = 1
 

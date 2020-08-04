@@ -39,12 +39,12 @@ def MergeBlock(layer_a, layer_b, mode='concat', block_name='merge'):
             if conv_flag: x = Activation('relu', name=block_name + '_add_relu')(x)
             return x
         elif to_downsample == 0:
-            for _ in range(max_pool):
-                A = MaxPooling2D(pool_size=(2,2), name=block_name + '_max_pool')(A)
+            for i in range(max_pool):
+                A = MaxPooling2D(pool_size=(2,2), name=block_name + '_max_pool_' + str(i))(A)
                 #print('Max Pooling - {}.shape: {}'.format(A, A.shape))
         else:
-            for _ in range(max_pool):
-                B = MaxPooling2D(pool_size=(2,2), name=block_name + '_max_pool')(B)
+            for i in range(max_pool):
+                B = MaxPooling2D(pool_size=(2,2), name=block_name + '_max_pool_' + str(i))(B)
                 #print('Max Pooling - {}.shape: {}'.format(B, B.shape))
 
         if mode == 'add':

@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
 import csv
 import time
 import numpy as np
 import math
 import networkx as nx
 from cgp_2_dag import *
-
+import matplotlib.pyplot as plt
+import pickle
 
 # gene[f][c] f:function type, c:connection (nodeID)
 class Individual(object):
@@ -18,6 +20,9 @@ class Individual(object):
         self.is_active = np.empty(self.net_info.node_num + self.net_info.out_num).astype(bool)
         self.is_pool = np.empty(self.net_info.node_num + self.net_info.out_num).astype(bool)
         self.eval = None
+        self.epochs_trained = 0
+        self.gen_num = 0
+        self.model_name = ''
         if init:
             print('init with specific architectures')
             self.init_gene_with_conv() # In the case of starting only convolution
@@ -110,7 +115,7 @@ class Individual(object):
 
             while self.gene[n][1] == self.gene[n][2] and self.net_info.get_func_input_num(self.gene[n][0]) == 2:
                 self.gene[n][2] = min_connect_id + np.random.randint(max_connect_id - min_connect_id)
-                print('max: {}, min: {}, gene: {}'.format(max_connect_id, min_connect_id, self.gene[n][2]))
+                #print('max: {}, min: {}, gene: {}'.format(max_connect_id, min_connect_id, self.gene[n][2]))
 
         self.check_active()
 
@@ -226,15 +231,30 @@ class Individual(object):
 
 # CGP with (1 + \lambda)-ES
 class CGP(object):
-    def __init__(self, net_info, eval_func, max_eval, lam=4, imgSize=256, init=False):
+    def __init__(self, net_info, eval_func, max_eval, pop_size=100, lam=4, imgSize=256, init=False):
         self.lam = lam
-        self.pop = [Individual(net_info, init) for _ in range(1 + self.lam)]
+        self.net_info = net_info
+        self.pop_size = pop_size
+        self.pop = [Individual(self.net_info, init) for _ in range(1 + self.pop_size)]
         self.eval_func = eval_func
         self.num_gen = 0
         self.num_eval = 0
         self.max_pool_num = int(math.log2(imgSize) - 2)
         self.max_eval = max_eval
         self.init = init
+        self.fittest = None
+    
+
+    def pickle_population(self, save_dir):
+        if not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+        p_name = os.path.join(save_dir, 'population_' + str(self.num_gen) + '.p')
+
+        try:
+            pickle.dump(self.pop, open(p_name, "wb"))
+        except:
+            pass
+
 
     def _evaluation(self, pop, eval_flag):
         # create network list
@@ -246,11 +266,15 @@ class CGP(object):
             DAG_list.append(G)
 
         num_epochs = self.num_epochs_scheduler(self.num_eval, self.max_eval, self.eval_func.epoch_num)
+        num_epochs_list = [num_epochs]*len(DAG_list)
         
         # evaluation
-        fp = self.eval_func(DAG_list, num_epochs, self.num_gen)
+        fp, model_names = self.eval_func(DAG_list, num_epochs_list, self.num_gen)
         for i, j in enumerate(active_index):
+            pop[j].gen_num = self.num_gen
             pop[j].eval = fp[i]
+            pop[j].epochs_trained = num_epochs
+            pop[j].model_name = model_names[i]
         evaluations = np.zeros(len(pop))
         for i in range(len(pop)):
             evaluations[i] = pop[i].eval
@@ -288,50 +312,172 @@ class CGP(object):
 
     
     def num_epochs_scheduler(self, eval_num, max_eval, max_epochs, min_epochs=5):
-        m = (max_epochs - min_epochs)/max_eval
-        return eval_num*m + min_epochs
+        intervals = np.arange(min_epochs, max_epochs + 1, 20)
+        num_epochs = min_epochs
+        for i in intervals:
+            if i <= ((eval_num + 10)/max_eval)*max_epochs: num_epochs = i
+        
+        return min(num_epochs, max_epochs)
 
+    
+    def get_fittest(self, individuals):
+        max_fitness = 0
+        fittest = None
+        for ind in individuals:
+            assert(ind.eval != None)
+            if ind.eval > max_fitness:
+                max_fitness = ind.eval
+                fittest = ind
+                if self.fittest == None:
+                    self.fittest = fittest
+                elif fittest.eval > self.fittest.eval:
+                    self.fittest = fittest
+        
+        return fittest
+    
+
+    def survivor_selection(self, parents, children, tour_size):
+        current_epochs = children[0].epochs_trained
+        to_retrain = []
+        num_epochs_list = []
+        
+        for p in parents:
+            if p.epochs_trained < current_epochs:
+                to_retrain.append(p)
+                num_epochs_list.append(current_epochs - p.epochs_trained)
+        
+        if len(to_retrain) > 0:
+            self.retrain(to_retrain, num_epochs_list)
+
+        total_pool = parents + children
+        next_gen = []
+
+        while len(next_gen) < len(parents):
+            tournament = np.random.choice(total_pool, tour_size, replace=False)
+            fittest = self.get_fittest(tournament)
+            if fittest not in next_gen:
+                next_gen.append(fittest)
+
+        for p in parents:
+            if p in self.pop:
+                self.pop.remove(p)
+
+        for c in next_gen:
+            self.pop.append(c)
+
+        if self.fittest != None and self.fittest not in self.pop:
+            self.pop.append(self.fittest)
+    
+
+    def tournament_selection(self, tour_pool, tour_size, num_tours):
+        selected = []
+        while len(selected) < num_tours:
+            tournament = np.random.choice(tour_pool, tour_size, replace=False)
+            fittest = self.get_fittest(tournament)
+            if fittest not in selected:
+                selected.append(fittest)
+        
+        return selected
+
+    # in case parents trained for fewer epochs than offspring, this function is called
+    # it will look in the directory p_files for the pickled graph that was generated when initially training each individual
+    def retrain(self, parent_pool, num_epochs_list):
+        DAG_list = []
+        model_names = []
+        for p in parent_pool:
+            assert(p.model_name)
+            model_names.append(p.model_name)
+            pickle_name = p.model_name.replace('.hdf5', '.gpickle')
+            pickle_name = './p_files/' + pickle_name
+            G = nx.read_gpickle(pickle_name)
+            DAG_list.append(G)
+        
+        fp, _ = self.eval_func(DAG_list, num_epochs_list, model_names, retrain = True)
+        assert(len(parent_pool) == len(fp))
+        
+        for i in range(len(fp)):
+            parent_pool[i].eval = fp[i]
+            parent_pool[i].epochs_trained = num_epochs_list[i]
+    
+
+    def get_fitness_stats(self):
+        evals = []
+        for ind in self.pop:
+            evals.append(ind.eval)
+        
+        return np.mean(evals), np.max(evals)
 
     # Evolution CGP:
     #   At each iteration:
     #     - Generate lambda individuals in which at least one active node changes (i.e., forced mutation)
     #     - Mutate the best individual with neutral mutation (unchanging the active nodes)
     #         if the best individual is not updated.
+    #TODO: change lam to pop_size
     def modified_evolution(self, mutation_rate=0.01, log_file='./log.txt', arch_file='./arch.txt'):
         with open('child.txt', 'w') as fw_c :
             writer_c = csv.writer(fw_c, lineterminator='\n')
             start_time = time.time()
             eval_flag = np.empty(self.lam)
-            active_num = self.pop[0].count_active_node()
-            _, pool_num= self.pop[0].check_pool()
-            if self.init:
-                pass
-            else: # in the case of not using an init indiviudal
-                while active_num < self.pop[0].net_info.min_active_num or pool_num > self.max_pool_num:
-                    self.pop[0].mutation(1.0)
-                    active_num = self.pop[0].count_active_node()
-                    _, pool_num= self.pop[0].check_pool()
-            self._evaluation([self.pop[0]], np.array([True]))
+            active_num = []
+            pool_num = []
+            num_tours = int(0.2*self.pop_size)
+            tour_size = 5
+            
+            mean_evals = []
+            max_evals = []
+
+            #initialize and evaluate initial population
+            print('GEN 0: INITIALIZING AND EVALUATING')
+            for i in np.arange(0, len(self.pop), self.lam):
+                for j in range(i, i + self.lam):
+                    active_num[j] = self.pop[j].count_active_node()
+                    _, pool_num = self.pop[i].check_pool()
+                    while active_num[j] < self.pop[j].net_info.min_active_num or pool_num > self.max_pool_num:
+                        self.pop[j].mutation(1.0)
+                        active_num[j] = self.pop[j].count_active_node()
+                        _, pool_num= self.pop[j].check_pool() 
+                self._evaluation([self.pop[i:j]], np.full((self.lam,), True))
+            
+            mean_fit, max_fit = self.get_fitness_stats()
+            mean_evals.append(mean_fit)
+            max_evals.append(max_fit)
+            
+            print('POPULATION INITIALIZED')
             print(self._log_data(net_info_type='active_only', start_time=start_time))
 
             while self.num_gen < self.max_eval:
                 self.num_gen += 1
-                # reproduction
-                for i in range(self.lam):
-                    eval_flag[i] = False
-                    self.pop[i + 1].copy(self.pop[0])  # copy a parent
-                    active_num = self.pop[i + 1].count_active_node()
-                    _, pool_num= self.pop[i + 1].check_pool()
-                    # mutation (forced mutation)
-                    while not eval_flag[i] or active_num < self.pop[i + 1].net_info.min_active_num or pool_num > self.max_pool_num:
-                        self.pop[i + 1].copy(self.pop[0])                       # copy a parent
-                        eval_flag[i] = self.pop[i + 1].mutation(mutation_rate)  # mutation
-                        active_num = self.pop[i + 1].count_active_node()
-                        _, pool_num= self.pop[i + 1].check_pool()
+                print('GENERATION {}'.format(self.num_gen))
+                parents = self.tournament_selection(self.pop, tour_size, num_tours)
+                children = []
 
-                # evaluation and selection
-                evaluations = self._evaluation(self.pop[1:], eval_flag=eval_flag)
-                best_arg = evaluations.argmax()
+                # reproduction
+                for p in parents:
+                    p_children = []
+                    for i in range(self.lam):
+                        eval_flag[i] = False
+                        child = Individual(self.net_info, self.init)
+                        child.copy(p)
+                        active_num = child.count_active_node()
+                        _, pool_num = child.check_pool()
+                        # mutation (forced mutation)
+                        while not eval_flag[i] or active_num < child.net_info.min_active_num or pool_num > self.max_pool_num:
+                            child.copy(p)
+                            eval_flag[i] = child.mutation(mutation_rate)
+                            active_num = child.count_active_node()
+                            _, pool_num = child.check_pool()
+                        
+                        p_children.append(child)
+                    
+                    self._evaluation(p_children, eval_flag)
+                    children.extend(p_children)
+
+                self.survivor_selection(parents, children, tour_size)
+
+                mean_fit, max_fit = self.get_fitness_stats()
+                mean_evals.append(mean_fit)
+                max_evals.append(max_fit)
+                
                 # save
                 f = open('arch_child.txt', 'a')
                 writer_f = csv.writer(f, lineterminator='\n')
@@ -339,12 +485,6 @@ class CGP(object):
                     writer_c.writerow(self._log_data_children(net_info_type='full', start_time=start_time, pop=self.pop[c]))
                     writer_f.writerow(self._log_data_children(net_info_type='active_only', start_time=start_time, pop=self.pop[c]))
                 f.close()
-                # replace the parent by the best individual
-                if evaluations[best_arg] > self.pop[0].eval:
-                    print('REPLACING PARENT')
-                    self.pop[0].copy(self.pop[best_arg + 1])
-                else:
-                    self.pop[0].neutral_mutation(mutation_rate)  # modify the parent (neutral mutation)
 
                 # display and save log
                 print(self._log_data(net_info_type='active_only', start_time=start_time))
@@ -356,3 +496,26 @@ class CGP(object):
                 writer_a.writerow(self._log_data(net_info_type='active_only', start_time=start_time))
                 fw.close()
                 fa.close()
+
+        
+        pickle.dump(mean_evals, open("mean_evals.p", "wb"))
+        pickle.dump(max_evals, open("max_evals.p", "wb"))
+        
+        mean_of_mean_evals = np.mean(mean_evals, axis=0)
+        std_of_mean_evals = np.std(mean_evals, axis=0)
+
+        mean_of_max_evals = np.mean(max_evals, axis=0)
+        std_of_max_evals = np.std(max_evals, axis=0)
+        
+        gens = []
+        for i in range(len(mean_evals)):
+            gens.append(i)
+        
+        plt.figure()
+        plt.errorbar(x=gens, y=mean_of_mean_evals, yerr=std_of_mean_evals)
+        plt.errorbar(x=gens, y=mean_of_max_evals, yerr=std_of_max_evals)
+        plt.title('Fitness vs Time')
+        plt.xlabel('Generation')
+        plt.ylabel('F1 Score')
+        plt.legend(['Mean Fitness', 'Max Fitness'], loc='upper left')
+        plt.savefig('cgpunet_drive_fitness.png')
