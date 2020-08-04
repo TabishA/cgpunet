@@ -434,7 +434,7 @@ class CGP(object):
                         self.pop[j].mutation(1.0)
                         active_num = self.pop[j].count_active_node()
                         _, pool_num= self.pop[j].check_pool() 
-                self._evaluation([self.pop[i:j]], np.full((self.lam,), True))
+                self._evaluation(self.pop[i:j], np.full((self.lam,), True))
             
             mean_fit, max_fit = self.get_fitness_stats()
             mean_evals.append(mean_fit)
