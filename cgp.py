@@ -235,7 +235,7 @@ class CGP(object):
         self.lam = lam
         self.net_info = net_info
         self.pop_size = pop_size
-        self.pop = [Individual(self.net_info, init) for _ in range(1 + self.pop_size)]
+        self.pop = [Individual(self.net_info, init) for _ in range(self.pop_size)]
         self.eval_func = eval_func
         self.num_gen = 0
         self.num_eval = 0
@@ -434,7 +434,7 @@ class CGP(object):
                         self.pop[j].mutation(1.0)
                         active_num = self.pop[j].count_active_node()
                         _, pool_num= self.pop[j].check_pool() 
-                self._evaluation(self.pop[i:j], np.full((self.lam,), True))
+                self._evaluation(self.pop[i:j], [True]*len(self.pop[i:j]))
             
             mean_fit, max_fit = self.get_fitness_stats()
             mean_evals.append(mean_fit)

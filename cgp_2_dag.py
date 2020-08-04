@@ -257,11 +257,11 @@ def cgp_2_dag(net_list, mirror=False):
                 G.add_node(node, num_channels= max(int(num_channels), int(in_ch)), pool_factor=pool_factor, id=i)
             elif sub_elements[1] == 'DeconvBlock':
                 num_channels = get_data(G, node, 'num_channels')
-                pool_factor = pool_factor - 1
+                pool_factor = G.nodes[in_node]['pool_factor'] - 1
                 G.add_node(node, num_channels=num_channels, pool_factor=pool_factor, id=i)
             elif op == 'Max' or op == 'Avg': # Max_Pool or Avg_Pool
                 num_channels = G.nodes[in_node]['num_channels']
-                pool_factor += 1
+                pool_factor = G.nodes[in_node]['pool_factor'] + 1
                 G.add_node(node, num_channels=num_channels, pool_factor=pool_factor, id=i)
 
             if in_node != node:
