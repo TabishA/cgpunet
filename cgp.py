@@ -418,8 +418,6 @@ class CGP(object):
             writer_c = csv.writer(fw_c, lineterminator='\n')
             start_time = time.time()
             eval_flag = np.empty(self.lam)
-            active_num = []
-            pool_num = []
             num_tours = int(0.2*self.pop_size)
             tour_size = 5
             
@@ -430,11 +428,11 @@ class CGP(object):
             print('GEN 0: INITIALIZING AND EVALUATING')
             for i in np.arange(0, len(self.pop), self.lam):
                 for j in range(i, i + self.lam):
-                    active_num[j] = self.pop[j].count_active_node()
+                    active_num = self.pop[j].count_active_node()
                     _, pool_num = self.pop[i].check_pool()
-                    while active_num[j] < self.pop[j].net_info.min_active_num or pool_num > self.max_pool_num:
+                    while active_num < self.pop[j].net_info.min_active_num or pool_num > self.max_pool_num:
                         self.pop[j].mutation(1.0)
-                        active_num[j] = self.pop[j].count_active_node()
+                        active_num = self.pop[j].count_active_node()
                         _, pool_num= self.pop[j].check_pool() 
                 self._evaluation([self.pop[i:j]], np.full((self.lam,), True))
             
