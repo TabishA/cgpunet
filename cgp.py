@@ -403,9 +403,35 @@ class CGP(object):
     def get_fitness_stats(self):
         evals = []
         for ind in self.pop:
-            evals.append(ind.eval)
+            if ind.eval is not None:
+                evals.append(ind.eval)
+            else:
+                print('Individual Eval is None: {}'.format(ind))
         
         return np.mean(evals), np.max(evals)
+    
+
+    def plot_evals(self, mean_evals, max_evals):
+        pickle.dump(mean_evals, open("mean_evals.p", "wb"))
+        pickle.dump(max_evals, open("max_evals.p", "wb"))
+        
+        mean_of_mean_evals = np.mean(mean_evals, axis=0)
+        std_of_mean_evals = np.std(mean_evals, axis=0)
+        mean_of_max_evals = np.mean(max_evals, axis=0)
+        std_of_max_evals = np.std(max_evals, axis=0)
+        
+        gens = []
+        for i in range(len(mean_evals)):
+            gens.append(i)
+        
+        plt.figure()
+        plt.errorbar(x=gens, y=mean_of_mean_evals, yerr=std_of_mean_evals)
+        plt.errorbar(x=gens, y=mean_of_max_evals, yerr=std_of_max_evals)
+        plt.title('Fitness vs Time')
+        plt.xlabel('Generation')
+        plt.ylabel('F1 Score')
+        plt.legend(['Mean Fitness', 'Max Fitness'], loc='upper left')
+        plt.savefig('cgpunet_drive_fitness.png')
 
     # Evolution CGP:
     #   At each iteration:
@@ -418,23 +444,26 @@ class CGP(object):
             writer_c = csv.writer(fw_c, lineterminator='\n')
             start_time = time.time()
             eval_flag = np.empty(self.lam)
-            num_tours = int(0.2*self.pop_size)
-            tour_size = 5
+            num_tours = max(int(0.2*self.pop_size), 1)
+            tour_size = min(5, len(self.pop))
             
             mean_evals = []
             max_evals = []
 
             #initialize and evaluate initial population
             print('GEN 0: INITIALIZING AND EVALUATING')
+            print('Population: {}'.format(self.pop))
             for i in np.arange(0, len(self.pop), self.lam):
-                for j in range(i, i + self.lam):
+                for j in range(i, min(i + self.lam, len(self.pop))):
                     active_num = self.pop[j].count_active_node()
                     _, pool_num = self.pop[i].check_pool()
                     while active_num < self.pop[j].net_info.min_active_num or pool_num > self.max_pool_num:
                         self.pop[j].mutation(1.0)
                         active_num = self.pop[j].count_active_node()
-                        _, pool_num= self.pop[j].check_pool() 
-                self._evaluation(self.pop[i:j], [True]*len(self.pop[i:j]))
+                        _, pool_num= self.pop[j].check_pool()
+                
+                print('Evaluating {}'.format(self.pop[i:j+1]))
+                self._evaluation(self.pop[i:j+1], [True]*len(self.pop[i:j+1]))
             
             mean_fit, max_fit = self.get_fitness_stats()
             mean_evals.append(mean_fit)
@@ -444,6 +473,7 @@ class CGP(object):
             print(self._log_data(net_info_type='active_only', start_time=start_time))
 
             while self.num_gen < self.max_eval:
+                self.pickle_population('./p_files_netlists')
                 self.num_gen += 1
                 print('GENERATION {}'.format(self.num_gen))
                 parents = self.tournament_selection(self.pop, tour_size, num_tours)
@@ -475,6 +505,8 @@ class CGP(object):
                 mean_fit, max_fit = self.get_fitness_stats()
                 mean_evals.append(mean_fit)
                 max_evals.append(max_fit)
+
+                self.plot_evals(mean_evals, max_evals)
                 
                 # save
                 f = open('arch_child.txt', 'a')
@@ -496,24 +528,3 @@ class CGP(object):
                 fa.close()
 
         
-        pickle.dump(mean_evals, open("mean_evals.p", "wb"))
-        pickle.dump(max_evals, open("max_evals.p", "wb"))
-        
-        mean_of_mean_evals = np.mean(mean_evals, axis=0)
-        std_of_mean_evals = np.std(mean_evals, axis=0)
-
-        mean_of_max_evals = np.mean(max_evals, axis=0)
-        std_of_max_evals = np.std(max_evals, axis=0)
-        
-        gens = []
-        for i in range(len(mean_evals)):
-            gens.append(i)
-        
-        plt.figure()
-        plt.errorbar(x=gens, y=mean_of_mean_evals, yerr=std_of_mean_evals)
-        plt.errorbar(x=gens, y=mean_of_max_evals, yerr=std_of_max_evals)
-        plt.title('Fitness vs Time')
-        plt.xlabel('Generation')
-        plt.ylabel('F1 Score')
-        plt.legend(['Mean Fitness', 'Max Fitness'], loc='upper left')
-        plt.savefig('cgpunet_drive_fitness.png')
