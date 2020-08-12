@@ -27,7 +27,7 @@ if __name__ == "__main__":
     dir_name = os.path.dirname(args.path)
     
     print('data path: {}'.format(dir_name))
-    eval_f = CNNEvaluation(gpu_num=4, dataset_path=dir_name, img_format='*.tif', mask_format='*.tif', input_shape=(128,128,1), target_shape=(128,128,1), out_model='cgpunet_drive')
+    eval_f = CNNEvaluation(gpu_num=4, dataset_path=dir_name, img_format='*.tif', mask_format='*.tif', batchsize=1, batchsize_valid=1, input_shape=(128,128,1), target_shape=(128,128,1))
     
     #CGP object contains a population of pop_size individuals
     cgp = CGP(network_info, eval_f, max_eval=100, pop_size=100, lam=4, imgSize=128, init=False)
