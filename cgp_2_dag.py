@@ -104,7 +104,7 @@ def append_output_layers(G, out_channels = 1, mirror=False):
                 
             elif leaf_pool_factor > 0: #append DeconvBlock
                 ch = int(leaf_channels/2) if int(leaf_channels/2) > out_channels else out_channels
-                out_node = 'D_DeconvBlock_' + str(leaf_channels) + '_2_' + str(leaf_id) + '_' + str(leaf_id)
+                out_node = 'D_DeconvBlock_' + str(ch) + '_2_' + str(leaf_id) + '_' + str(leaf_id)
                 G.add_node(out_node, num_channels=ch, pool_factor=leaf_pool_factor-1, id=leaf_id+1)
 
                 leaf_pool_factor = leaf_pool_factor - 1
@@ -246,16 +246,16 @@ def cgp_2_dag(net_list, mirror=False):
                 G.add_node(node, num_channels=init_num_channels, pool_factor=0, id=i)
                 pool_factor = 0
                 num_channels = 1
-            elif sub_elements[1] == 'ConvBlock':
+            elif (re.search("^ConvBlock.*", sub_elements[1]):
                 num_channels = get_data(G, node, 'num_channels')
                 pool_factor = G.nodes[in_node]['pool_factor']
                 G.add_node(node, num_channels=num_channels, pool_factor=pool_factor, id=i)
-            elif sub_elements[1] == 'ResBlock':
+            elif (re.search("^ResBlock.*", sub_elements[1]):
                 num_channels = get_data(G, node, 'num_channels')
                 in_ch = G.nodes[in_node]['num_channels']
                 pool_factor = G.nodes[in_node]['pool_factor']
                 G.add_node(node, num_channels= max(int(num_channels), int(in_ch)), pool_factor=pool_factor, id=i)
-            elif sub_elements[1] == 'DeconvBlock':
+            elif (re.search("^DeconvBlock.*", sub_elements[1]):
                 num_channels = get_data(G, node, 'num_channels')
                 pool_factor = G.nodes[in_node]['pool_factor'] - 1
                 G.add_node(node, num_channels=num_channels, pool_factor=pool_factor, id=i)
@@ -323,36 +323,3 @@ def draw_dag(G, save_to_dir=None):
         plt.savefig(save_to_dir)
 
 
-def dag_2_vec(G, input_size = (128,128)):
-    vec = []
-    depth = nx.shortest_path_length(G, 'input_0_0')
-    for node in G.nodes():
-        node_dict = G.nodes[node]
-        pf = node_dict['pool_factor']
-        x = input_size[0]*(2*pf)
-        y = input_size[1]*(2*pf)
-        vec.append([int(node_dict['num_channels']), x, y, depth[node]])
-
-    return vec
-
-
-def cosine_similarity(G1, G2):
-    v1 = dag_2_vec(G1)
-    v2 = dag_2_vec(G2)
-
-    similarity = np.zeros((len(v1), len(v2)))
-
-    for i in range(similarity.shape[0]):
-        for j in range(similarity.shape[1]):
-            c_sim = np.dot(v1[i], v2[j])/(np.linalg.norm(v1[i])*np.linalg.norm(v2[j]))
-            similarity[i][j] = c_sim
-
-    
-    a = 0 if len(v2) > len(v1) else 1
-
-    max_sim = np.max(similarity, axis=a)
-    sum_max_sim = np.sum(max_sim) + abs(len(v1) - len(v2))
-
-    norm_sum = sum_max_sim/max(len(v1), len(v2))
-
-    return norm_sum

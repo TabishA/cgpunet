@@ -231,7 +231,7 @@ class Individual(object):
 
 # CGP with (1 + \lambda)-ES
 class CGP(object):
-    def __init__(self, net_info, eval_func, max_eval, pop_size=100, lam=4, imgSize=256, init=False):
+    def __init__(self, net_info, eval_func, max_eval, pop_size=100, lam=4, imgSize=256, init=False, basename = 'cgpunet_drive'):
         self.lam = lam
         self.net_info = net_info
         self.pop_size = pop_size
@@ -243,6 +243,7 @@ class CGP(object):
         self.max_eval = max_eval
         self.init = init
         self.fittest = None
+        self.basename = basename
     
 
     def pickle_population(self, save_dir):
@@ -256,30 +257,32 @@ class CGP(object):
             pass
 
 
-    def _evaluation(self, pop, eval_flag):
+    def _evaluation(self, pop, eval_flag, init_flag=False):
         # create network list
         DAG_list = []
-        #net_lists = []
+        model_names = []
         active_index = np.where(eval_flag)[0]
         for i in active_index:
             G = cgp_2_dag(pop[i].active_net_list())
             DAG_list.append(G)
+            model_names.append(pop[i].model_name)
 
         num_epochs = self.num_epochs_scheduler(self.num_eval, self.max_eval, self.eval_func.epoch_num)
         num_epochs_list = [num_epochs]*len(DAG_list)
         
         # evaluation
-        fp, model_names = self.eval_func(DAG_list, num_epochs_list, self.num_gen)
+        fp = self.eval_func(DAG_list, num_epochs_list, model_names)
         for i, j in enumerate(active_index):
             pop[j].gen_num = self.num_gen
-            pop[j].eval = fp[i]
+            pop[j].eval = fp[pop[j].model_name]
             pop[j].epochs_trained = num_epochs
-            pop[j].model_name = model_names[i]
+        
         evaluations = np.zeros(len(pop))
         for i in range(len(pop)):
             evaluations[i] = pop[i].eval
 
-        self.num_eval += len(DAG_list)
+        if not init_flag:
+            self.num_eval += len(DAG_list)
         return evaluations
 
     def _log_data(self, net_info_type='active_only', start_time=0):
@@ -382,6 +385,7 @@ class CGP(object):
     # in case parents trained for fewer epochs than offspring, this function is called
     # it will look in the directory p_files for the pickled graph that was generated when initially training each individual
     def retrain(self, parent_pool, num_epochs_list):
+        print('RETRAINING PARENTS')
         DAG_list = []
         model_names = []
         for p in parent_pool:
@@ -392,11 +396,11 @@ class CGP(object):
             G = nx.read_gpickle(pickle_name)
             DAG_list.append(G)
         
-        fp, _ = self.eval_func(DAG_list, num_epochs_list, model_names, retrain = True)
+        fp = self.eval_func(DAG_list, num_epochs_list, model_names, retrain = True)
         assert(len(parent_pool) == len(fp))
         
         for i in range(len(fp)):
-            parent_pool[i].eval = fp[i]
+            parent_pool[i].eval = fp[parent_pool[i].model_name]
             parent_pool[i].epochs_trained = num_epochs_list[i]
     
 
@@ -415,18 +419,18 @@ class CGP(object):
         pickle.dump(mean_evals, open("mean_evals.p", "wb"))
         pickle.dump(max_evals, open("max_evals.p", "wb"))
         
-        mean_of_mean_evals = np.mean(mean_evals, axis=0)
-        std_of_mean_evals = np.std(mean_evals, axis=0)
-        mean_of_max_evals = np.mean(max_evals, axis=0)
-        std_of_max_evals = np.std(max_evals, axis=0)
+        #mean_of_mean_evals = np.mean(mean_evals, axis=0)
+        #std_of_mean_evals = np.std(mean_evals, axis=0)
+        #mean_of_max_evals = np.mean(max_evals, axis=0)
+        #std_of_max_evals = np.std(max_evals, axis=0)
         
         gens = []
         for i in range(len(mean_evals)):
             gens.append(i)
         
         plt.figure()
-        plt.errorbar(x=gens, y=mean_of_mean_evals, yerr=std_of_mean_evals)
-        plt.errorbar(x=gens, y=mean_of_max_evals, yerr=std_of_max_evals)
+        plt.errorbar(x=gens, y=mean_evals)
+        plt.errorbar(x=gens, y=max_evals)
         plt.title('Fitness vs Time')
         plt.xlabel('Generation')
         plt.ylabel('F1 Score')
@@ -443,7 +447,7 @@ class CGP(object):
         with open('child.txt', 'w') as fw_c :
             writer_c = csv.writer(fw_c, lineterminator='\n')
             start_time = time.time()
-            eval_flag = np.empty(self.lam)
+            #eval_flag = np.empty(self.lam)
             num_tours = max(int(0.2*self.pop_size), 1)
             tour_size = min(5, len(self.pop))
             
@@ -456,14 +460,14 @@ class CGP(object):
             for i in np.arange(0, len(self.pop), self.lam):
                 for j in range(i, min(i + self.lam, len(self.pop))):
                     active_num = self.pop[j].count_active_node()
-                    _, pool_num = self.pop[i].check_pool()
+                    _, pool_num = self.pop[j].check_pool()
                     while active_num < self.pop[j].net_info.min_active_num or pool_num > self.max_pool_num:
                         self.pop[j].mutation(1.0)
                         active_num = self.pop[j].count_active_node()
                         _, pool_num= self.pop[j].check_pool()
+                    self.pop[j].model_name = self.basename + '_' + str(self.num_gen) + '_' + str(j) + '.hdf5'
                 
-                print('Evaluating {}'.format(self.pop[i:j+1]))
-                self._evaluation(self.pop[i:j+1], [True]*len(self.pop[i:j+1]))
+            self._evaluation(self.pop, [True]*len(self.pop), init_flag=True)
             
             mean_fit, max_fit = self.get_fitness_stats()
             mean_evals.append(mean_fit)
@@ -478,27 +482,30 @@ class CGP(object):
                 print('GENERATION {}'.format(self.num_gen))
                 parents = self.tournament_selection(self.pop, tour_size, num_tours)
                 children = []
+                eval_flag = np.empty(len(parents)*self.lam)
 
                 # reproduction
-                for p in parents:
-                    p_children = []
-                    for i in range(self.lam):
-                        eval_flag[i] = False
+                for i, p in enumerate(parents):
+                    if p is None:
+                        print('Nonetype individual - skipping {}'.format(p))
+                        continue
+                    for j in range(self.lam):
+                        eval_flag[i*self.lam + j] = False
                         child = Individual(self.net_info, self.init)
                         child.copy(p)
                         active_num = child.count_active_node()
                         _, pool_num = child.check_pool()
                         # mutation (forced mutation)
-                        while not eval_flag[i] or active_num < child.net_info.min_active_num or pool_num > self.max_pool_num:
+                        while not eval_flag[i*self.lam + j] or active_num < child.net_info.min_active_num or pool_num > self.max_pool_num:
                             child.copy(p)
-                            eval_flag[i] = child.mutation(mutation_rate)
+                            eval_flag[i*self.lam + j] = child.mutation(mutation_rate)
                             active_num = child.count_active_node()
                             _, pool_num = child.check_pool()
                         
-                        p_children.append(child)
+                        child.model_name = self.basename + '_' + str(self.num_gen) + '_' + str(i+j) + '.hdf5'
+                        children.append(child)
                     
-                    self._evaluation(p_children, eval_flag)
-                    children.extend(p_children)
+                self._evaluation(children, eval_flag)
 
                 self.survivor_selection(parents, children, tour_size)
 

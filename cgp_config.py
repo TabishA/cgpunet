@@ -1,28 +1,29 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import concurrent.futures
 import numpy as np
 import cgpunet_train as cnn
-
+import multiprocessing
 
 # Evaluation of CNNs
-def cnn_eval(args):
+def cnn_eval(dag, gpu_id, epoch_num, batchsize, batchsize_valid, dataset_path, img_format, mask_format, input_shape, target_shape, out_model, verbose, return_dict):
 
-    dag, gpu_id, epoch_num, batchsize, batchsize_valid, dataset_path, img_format, mask_format, input_shape, target_shape, out_model, verbose = args
+    #dag, gpu_id, epoch_num, batchsize, batchsize_valid, dataset_path, img_format, mask_format, input_shape, target_shape, out_model, verbose, return_dict = args
 
     print('\tgpu_id:', gpu_id, ',', dag)
     train = cnn.CNN_train(dataset_path, img_format, mask_format, verbose=verbose, input_shape=input_shape, target_shape=target_shape, batchsize=batchsize, batchsize_valid=batchsize_valid)
     try:
         evaluation = train(dag, gpu_id, epoch_num=epoch_num, out_model=out_model)
-    except:
+    except Exception as e:
+        print(e)
         evaluation = 0
     print('\tgpu_id:', gpu_id, ', eval:', evaluation)
-    return evaluation
+    return_dict[out_model] = evaluation
+
 
 
 class CNNEvaluation(object):
-    def __init__(self, gpu_num, dataset_path, img_format, mask_format, verbose=True, epoch_num=50, batchsize=16, batchsize_valid=16, input_shape=(256,256,1), target_shape=(256,256,1), out_model='cgpunet'):
+    def __init__(self, gpu_num, dataset_path, img_format, mask_format, verbose=True, epoch_num=50, batchsize=16, batchsize_valid=16, input_shape=(256,256,1), target_shape=(256,256,1)):
         self.gpu_num = gpu_num
         self.epoch_num = epoch_num
         self.batchsize = batchsize
@@ -33,33 +34,27 @@ class CNNEvaluation(object):
         self.target_shape = target_shape
         self.img_format = img_format
         self.mask_format = mask_format
-        self.out_model = out_model
 
-    def __call__(self, DAG_list, epochs, gen_num, retrain = False):
-        evaluations = np.zeros(len(DAG_list))
-        out_model_names = []
+    def __call__(self, DAG_list, epochs, model_names, retrain = False):
+        manager = multiprocessing.Manager()
+        return_dict = manager.dict() 
         for i in np.arange(0, len(DAG_list), self.gpu_num):
             process_num = np.min((i + self.gpu_num, len(DAG_list))) - i
 
-            args = []
+            processes = []
+            arguments = []      
 
             for j in range(process_num):
-                if not retrain:
-                    out_model = self.out_model + '_' + str(gen_num) + '_' + str(j) + '.hdf5'
-                else:
-                    assert(isinstance(gen_num[i + j], str))
-                    out_model = gen_num[i + j]
-                
-                out_model_names.append(out_model)
-                args.append((DAG_list[i+j], j, epochs[i + j], self.batchsize, self.batchsize_valid, self.dataset_path, self.img_format, self.mask_format, self.input_shape, self.target_shape, out_model, self.verbose))
+                out_model = model_names[i + j]
+                arguments = (DAG_list[i+j], j, epochs[i + j], self.batchsize, self.batchsize_valid, self.dataset_path, self.img_format, self.mask_format, self.input_shape, self.target_shape, out_model, self.verbose, return_dict)
+                p = multiprocessing.Process(target=cnn_eval, args=arguments)
+                p.start()
+                processes.append(p)
 
-            with concurrent.futures.ProcessPoolExecutor(max_workers=self.gpu_num - 1) as executor:
-                results = executor.map(cnn_eval, args)
-
-            for k, r in enumerate(results):
-                evaluations[i + k] = r
+            for p in processes:
+                p.join()
         
-        return evaluations, out_model_names
+        return return_dict
 
 
 
