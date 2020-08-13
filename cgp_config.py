@@ -17,7 +17,7 @@ def cnn_eval(dag, gpu_id, epoch_num, batchsize, batchsize_valid, dataset_path, i
     except Exception as e:
         print(e)
         evaluation = 0
-    print('\tgpu_id:', gpu_id, ', eval:', evaluation)
+    print('\tgpu_id:', gpu_id, 'model_name: ', out_model, ', eval:', evaluation)
     return_dict[out_model] = evaluation
 
 

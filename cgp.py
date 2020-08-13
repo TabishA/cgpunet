@@ -256,6 +256,12 @@ class CGP(object):
         except:
             pass
 
+    
+    def load_population(self, p_file, init_gen):
+        loaded_pop = pickle.load(open(p_file, "rb"))
+        self.pop = loaded_pop
+        self.num_gen = init_gen
+
 
     def _evaluation(self, pop, eval_flag, init_flag=False):
         # create network list
@@ -337,9 +343,16 @@ class CGP(object):
                     self.fittest = fittest
         
         return fittest
-    
 
+    
+    def get_invalid_individuals(self):
+        invalids = []
+        for p in self.pop:
+            if p.eval == 0: invalids.append(p)
+
+    
     def survivor_selection(self, parents, children, tour_size):
+        print('SURVIVOR SELECTION')
         current_epochs = children[0].epochs_trained
         to_retrain = []
         num_epochs_list = []
@@ -352,13 +365,15 @@ class CGP(object):
         if len(to_retrain) > 0:
             self.retrain(to_retrain, num_epochs_list)
 
+        #add invalid individuals to survivor selection process
+        parents.extend(self.get_invalid_individuals())
         total_pool = parents + children
         next_gen = []
 
         while len(next_gen) < len(parents):
             tournament = np.random.choice(total_pool, tour_size, replace=False)
             fittest = self.get_fittest(tournament)
-            if fittest not in next_gen:
+            if fittest not in next_gen and fittest.eval != 0:
                 next_gen.append(fittest)
 
         for p in parents:
@@ -373,11 +388,12 @@ class CGP(object):
     
 
     def tournament_selection(self, tour_pool, tour_size, num_tours):
+        print('PARENT SELECTION')
         selected = []
         while len(selected) < num_tours:
             tournament = np.random.choice(tour_pool, tour_size, replace=False)
             fittest = self.get_fittest(tournament)
-            if fittest not in selected:
+            if fittest not in selected and fittest.eval != 0:
                 selected.append(fittest)
         
         return selected
@@ -443,7 +459,7 @@ class CGP(object):
     #     - Mutate the best individual with neutral mutation (unchanging the active nodes)
     #         if the best individual is not updated.
     #TODO: change lam to pop_size
-    def modified_evolution(self, mutation_rate=0.01, log_file='./log.txt', arch_file='./arch.txt'):
+    def modified_evolution(self, mutation_rate=0.01, log_file='./log.txt', arch_file='./arch.txt', load_population='', init_gen=0):
         with open('child.txt', 'w') as fw_c :
             writer_c = csv.writer(fw_c, lineterminator='\n')
             start_time = time.time()
@@ -454,20 +470,23 @@ class CGP(object):
             mean_evals = []
             max_evals = []
 
-            #initialize and evaluate initial population
-            print('GEN 0: INITIALIZING AND EVALUATING')
-            print('Population: {}'.format(self.pop))
-            for i in np.arange(0, len(self.pop), self.lam):
-                for j in range(i, min(i + self.lam, len(self.pop))):
-                    active_num = self.pop[j].count_active_node()
-                    _, pool_num = self.pop[j].check_pool()
-                    while active_num < self.pop[j].net_info.min_active_num or pool_num > self.max_pool_num:
-                        self.pop[j].mutation(1.0)
+            if not load_population:
+                #initialize and evaluate initial population
+                print('GEN 0: INITIALIZING AND EVALUATING')
+                print('Population: {}'.format(self.pop))
+                for i in np.arange(0, len(self.pop), self.lam):
+                    for j in range(i, min(i + self.lam, len(self.pop))):
                         active_num = self.pop[j].count_active_node()
-                        _, pool_num= self.pop[j].check_pool()
-                    self.pop[j].model_name = self.basename + '_' + str(self.num_gen) + '_' + str(j) + '.hdf5'
+                        _, pool_num = self.pop[j].check_pool()
+                        while active_num < self.pop[j].net_info.min_active_num or pool_num > self.max_pool_num:
+                            self.pop[j].mutation(1.0)
+                            active_num = self.pop[j].count_active_node()
+                            _, pool_num= self.pop[j].check_pool()
+                        self.pop[j].model_name = self.basename + '_' + str(self.num_gen) + '_' + str(j) + '.hdf5'
                 
-            self._evaluation(self.pop, [True]*len(self.pop), init_flag=True)
+                self._evaluation(self.pop, [True]*len(self.pop), init_flag=True)
+            else:
+                self.load_population(load_population, init_gen)
             
             mean_fit, max_fit = self.get_fitness_stats()
             mean_evals.append(mean_fit)
