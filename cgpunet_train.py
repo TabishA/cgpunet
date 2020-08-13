@@ -95,6 +95,9 @@ class CNN_train():
 
         val_f1 = 2*((val_precision[0]*val_recall[0])/(val_precision[0]+val_recall[0]+K.epsilon()))
 
+        if not os.path.isdir('./figures'):
+            os.makedirs('./figures')
+
         acc_fig_name = out_model.replace('.hdf5', '_acc.png')
         acc_fig_name = './figures/' + acc_fig_name
 
@@ -121,6 +124,10 @@ class CNN_train():
         plt.savefig(loss_fig_name)
 
         pickle_name = out_model.replace('.hdf5', '.gpickle')
+        
+        if not os.path.isdir('./p_files'):
+            os.makedirs('./p_files')
+
         pickle_name = './p_files/' + pickle_name
         nx.write_gpickle(dag, pickle_name)
 
