@@ -54,6 +54,35 @@ class CNNEvaluation(object):
             for p in processes:
                 p.join()
         
+        #the current version is throwing key errors with some model names.
+        #here, I am ensuring that the return dict has values for corresponding to all elements of model_names by repeating the above process for missing models
+        #TODO: remove repeated code by incorporating into the loop above
+        missed_models = []
+        
+        for name in model_names:
+            if name not in return_dict.keys(): missed_models.append(name)
+
+        
+        for i in np.arange(0, len(missed_models), self.gpu_num):
+            process_num = np.min((i + self.gpu_num, len(missed_models))) - i
+            
+            processes = []
+            arguments = []      
+            
+            for j in range(process_num):
+                out_model = missed_models[i + j]
+                k = model_names.index(out_model)
+                arguments = (DAG_list[k], j, epochs[k], self.batchsize, self.batchsize_valid, self.dataset_path, self.img_format, self.mask_format, self.input_shape, self.target_shape, out_model, self.verbose, return_dict)
+                p = multiprocessing.Process(target=cnn_eval, args=arguments)
+                p.start()
+                processes.append(p)
+
+            for p in processes:
+                p.join()
+
+        
+        assert(len(return_dict) == len(model_names))
+
         return return_dict
 
 
