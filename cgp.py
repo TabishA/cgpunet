@@ -521,7 +521,7 @@ class CGP(object):
                             active_num = child.count_active_node()
                             _, pool_num = child.check_pool()
                         
-                        child.model_name = self.basename + '_' + str(self.num_gen) + '_' + str(i+j) + '.hdf5'
+                        child.model_name = self.basename + '_' + str(self.num_gen) + '_' + str(i*self.lam+j) + '.hdf5'
                         children.append(child)
                     
                 self._evaluation(children, eval_flag)
