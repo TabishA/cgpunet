@@ -349,6 +349,8 @@ class CGP(object):
         invalids = []
         for p in self.pop:
             if p.eval == 0: invalids.append(p)
+        
+        return invalids
 
     
     def survivor_selection(self, parents, children, tour_size):
