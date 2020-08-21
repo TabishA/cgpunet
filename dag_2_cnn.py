@@ -3,8 +3,8 @@
 from cgp_2_dag import *
 import tensorflow as tf
 from blocks import *
-from keras.models import *
-from keras.optimizers import Adam
+from tensorflow.keras.models import *
+from tensorflow.keras.optimizers import Adam
 import tensorflow.keras.metrics as metrics
 import re
 import os

@@ -2,7 +2,9 @@
 from dataHelperTif import *
 import numpy as np
 from PIL import Image
-import keras
+import tensorflow as tf
+keras = tf.compat.v1.keras
+#import keras.utils.Sequence
 
 class DataGenerator(keras.utils.Sequence):
 

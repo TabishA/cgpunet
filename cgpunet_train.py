@@ -3,8 +3,8 @@
 import os
 import sys
 from dag_2_cnn import *
-from keras import backend as K
-from keras.callbacks import ModelCheckpoint, History
+from tensorflow.compat.v1.keras import backend as K
+from tensorflow.keras.callbacks import ModelCheckpoint, History
 from DataGenerator import *
 import matplotlib.pyplot as plt
 
