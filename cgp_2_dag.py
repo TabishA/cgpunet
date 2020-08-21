@@ -46,7 +46,7 @@ def get_data(G, incoming_node, field):
 
 
 def merge_nodes(G, node1, node2, mode='concat'):
-    print('MERGING NODES')
+    #print('MERGING NODES')
 
     node1_id = int(G.nodes[node1]['id'])
     node2_id = int(G.nodes[node2]['id'])
@@ -182,7 +182,7 @@ def combine(G, Gr):
         
     Gr = nx.relabel_nodes(Gr, mapping, copy=False)
 
-    print('relabeled Gr: {}'.format(Gr.nodes()))
+    #print('relabeled Gr: {}'.format(Gr.nodes()))
 
     Gr = nx.compose(G, Gr)
 
@@ -204,7 +204,7 @@ def increment_duplicate_index(elem, i):
 
 #TODO: input shape as args
 def cgp_2_dag(net_list, mirror=False):
-    print('Individual: {}'.format(net_list))
+    #print('Individual: {}'.format(net_list))
 
     G = nx.MultiDiGraph()
 
@@ -239,23 +239,23 @@ def cgp_2_dag(net_list, mirror=False):
             connect_index = int(sub_elements[len(sub_elements) - 2])
             in_node = node_list[connect_index]
 
-            print('node: {}, in_node: {}'.format(node, in_node))
+            #print('node: {}, in_node: {}'.format(node, in_node))
             
             if op == 'input':
                 #print('HELLO INPUT NODE')
                 G.add_node(node, num_channels=init_num_channels, pool_factor=0, id=i)
                 pool_factor = 0
                 num_channels = 1
-            elif (re.search("^ConvBlock.*", sub_elements[1]):
+            elif (re.search("^ConvBlock.*", sub_elements[1])):
                 num_channels = get_data(G, node, 'num_channels')
                 pool_factor = G.nodes[in_node]['pool_factor']
                 G.add_node(node, num_channels=num_channels, pool_factor=pool_factor, id=i)
-            elif (re.search("^ResBlock.*", sub_elements[1]):
+            elif (re.search("^ResBlock.*", sub_elements[1])):
                 num_channels = get_data(G, node, 'num_channels')
                 in_ch = G.nodes[in_node]['num_channels']
                 pool_factor = G.nodes[in_node]['pool_factor']
                 G.add_node(node, num_channels= max(int(num_channels), int(in_ch)), pool_factor=pool_factor, id=i)
-            elif (re.search("^DeconvBlock.*", sub_elements[1]):
+            elif (re.search("^DeconvBlock.*", sub_elements[1])):
                 num_channels = get_data(G, node, 'num_channels')
                 pool_factor = G.nodes[in_node]['pool_factor'] - 1
                 G.add_node(node, num_channels=num_channels, pool_factor=pool_factor, id=i)
