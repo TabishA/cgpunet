@@ -4,6 +4,7 @@
 import numpy as np
 import cgpunet_train as cnn
 import multiprocessing
+import sys
 
 # Evaluation of CNNs
 def cnn_eval(dag, gpu_id, epoch_num, batchsize, batchsize_valid, dataset_path, img_format, mask_format, input_shape, target_shape, out_model, verbose, return_dict):
@@ -56,32 +57,28 @@ class CNNEvaluation(object):
         
         #the current version is throwing key errors with some model names.
         #here, I am ensuring that the return dict has values for corresponding to all elements of model_names by repeating the above process for missing models
-        #TODO: remove repeated code by incorporating into the loop above
-        missed_models = []
         
-        for name in model_names:
-            if name not in return_dict.keys(): missed_models.append(name)
+        fcount = 0
 
-        
-        for i in np.arange(0, len(missed_models), self.gpu_num):
-            process_num = np.min((i + self.gpu_num, len(missed_models))) - i
+        while len(return_dict) < len(model_names):
+            fcount += 1
+            if fcount == 101: sys.exit()
+            print('return_dict keys: {} \t length: {}'.format(return_dict.keys(), len(return_dict)))
+            print('model names: {} \t length: {}'.format(model_names, len(model_names)))
             
-            processes = []
-            arguments = []      
+            missed_models = []
             
-            for j in range(process_num):
-                out_model = missed_models[i + j]
-                k = model_names.index(out_model)
-                arguments = (DAG_list[k], j, epochs[k], self.batchsize, self.batchsize_valid, self.dataset_path, self.img_format, self.mask_format, self.input_shape, self.target_shape, out_model, self.verbose, return_dict)
-                p = multiprocessing.Process(target=cnn_eval, args=arguments)
-                p.start()
-                processes.append(p)
+            for name in model_names:
+                if name not in return_dict.keys(): missed_models.append(name)
+            
+            print('missed models: {}'.format(missed_models))
 
-            for p in processes:
-                p.join()
-
-        
-        assert(len(return_dict) == len(model_names))
+            for m in missed_models:
+                print('Training {}'.format(m))
+                train = cnn.CNN_train(self.dataset_path, self.img_format, self.mask_format, verbose=self.verbose, input_shape=self.input_shape, target_shape=self.target_shape, batchsize=self.batchsize, batchsize_valid=self.batchsize_valid)
+                k = model_names.index(m)
+                return_dict[m] = train(DAG_list[k], 0, epochs[k], m)
+                
 
         return return_dict
 

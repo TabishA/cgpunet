@@ -10,6 +10,7 @@ import networkx as nx
 from cgp_2_dag import *
 import matplotlib.pyplot as plt
 import pickle
+from knn import *
 
 # gene[f][c] f:function type, c:connection (nodeID)
 class Individual(object):
@@ -23,6 +24,7 @@ class Individual(object):
         self.epochs_trained = 0
         self.gen_num = 0
         self.model_name = ''
+        self.novelty = 0
         if init:
             print('init with specific architectures')
             self.init_gene_with_conv() # In the case of starting only convolution
@@ -244,12 +246,13 @@ class CGP(object):
         self.init = init
         self.fittest = None
         self.basename = basename
+        self.search_archive = []
     
 
-    def pickle_population(self, save_dir):
+    def pickle_population(self, save_dir, mode='eval'):
         if not os.path.isdir(save_dir):
             os.makedirs(save_dir)
-        p_name = os.path.join(save_dir, 'population_' + str(self.num_gen) + '.p')
+        p_name = os.path.join(save_dir, 'population_' + mode + '_' + str(self.num_gen) + '.p')
 
         try:
             pickle.dump(self.pop, open(p_name, "wb"))
@@ -329,18 +332,27 @@ class CGP(object):
         return min(num_epochs, max_epochs)
 
     
-    def get_fittest(self, individuals):
+    def get_fittest(self, individuals, mode='eval'):
         max_fitness = 0
         fittest = None
         for ind in individuals:
-            assert(ind.eval != None)
-            if ind.eval > max_fitness:
-                max_fitness = ind.eval
-                fittest = ind
+            if mode=='eval':
+                if ind.eval > max_fitness:
+                    max_fitness = ind.eval
+                    fittest = ind
                 if self.fittest == None:
                     self.fittest = fittest
                 elif fittest.eval > self.fittest.eval:
                     self.fittest = fittest
+            elif mode == 'novelty':
+                if ind.novelty > max_fitness:
+                    max_fitness = ind.novelty
+                    fittest = ind
+                if self.fittest == None:
+                    self.fittest = fittest
+                elif fittest.novelty > self.fittest.novelty:
+                    self.fittest = fittest
+                    if fittest not in self.search_archive: self.search_archive.append(fittest)
         
         return fittest
 
@@ -353,6 +365,27 @@ class CGP(object):
         return invalids
 
     
+    def novelty_survivor_selection(self, parents, children, tour_size):
+        total_pool = parents + children
+        next_gen = []
+
+        while len(next_gen) < len(parents):
+            tournament = np.random.choice(total_pool, tour_size, replace=False)
+            fittest = self.get_fittest(tournament, mode='novelty')
+            if fittest not in next_gen and fittest.novelty != 0:
+                next_gen.append(fittest)
+
+        for p in parents:
+            if p in self.pop:
+                self.pop.remove(p)
+
+        for c in next_gen:
+            self.pop.append(c)
+
+        if self.fittest != None and self.fittest not in self.pop:
+            self.pop.append(self.fittest)
+
+
     def survivor_selection(self, parents, children, tour_size):
         print('SURVIVOR SELECTION')
         current_epochs = children[0].epochs_trained
@@ -389,14 +422,17 @@ class CGP(object):
             self.pop.append(self.fittest)
     
 
-    def tournament_selection(self, tour_pool, tour_size, num_tours):
+    def tournament_selection(self, tour_pool, tour_size, num_tours, mode='eval'):
         print('PARENT SELECTION')
         selected = []
         while len(selected) < num_tours:
             tournament = np.random.choice(tour_pool, tour_size, replace=False)
-            fittest = self.get_fittest(tournament)
-            if fittest not in selected and fittest.eval != 0:
-                selected.append(fittest)
+            fittest = self.get_fittest(tournament, mode=mode)
+            if fittest not in selected:
+                if mode=='eval' and fittest.eval != 0:
+                    selected.append(fittest)
+                elif mode=='novelty' and fittest.novelty != 0:
+                    selected.append(fittest)
         
         return selected
 
@@ -422,13 +458,16 @@ class CGP(object):
             parent_pool[i].epochs_trained = num_epochs_list[i]
     
 
-    def get_fitness_stats(self):
+    def get_stats(self, mode='eval'):
         evals = []
         for ind in self.pop:
-            if ind.eval is not None:
-                evals.append(ind.eval)
-            else:
-                print('Individual Eval is None: {}'.format(ind))
+            if mode == 'eval':
+                if ind.eval is not None:
+                    evals.append(ind.eval)
+            elif mode == 'novelty':
+                if ind.novelty is not None:
+                    print('Individual: {}, Novelty: {}'.format(ind, ind.novelty))
+                    evals.append(ind.novelty)
         
         return np.mean(evals), np.max(evals)
     
@@ -454,6 +493,41 @@ class CGP(object):
         plt.ylabel('F1 Score')
         plt.legend(['Mean Fitness', 'Max Fitness'], loc='upper left')
         plt.savefig('cgpunet_drive_fitness.png')
+        plt.close()
+
+    
+    def evaluate_novelty(self, next_generation = None):
+        k = int(math.sqrt(len(self.pop))) + 1
+        DAGs = dict()
+        
+        for p in self.pop:
+            DAGs[p] = cgp_2_dag(p.active_net_list())
+        
+        if next_generation is None:
+            for individual in DAGs.keys():
+                neighbours = get_neighbours(list(DAGs.values()), DAGs[individual], k)
+                knn_val = 0
+                for n in neighbours: knn_val += n[1]
+                individual.novelty = 100 - 100*(knn_val/k)
+        else:
+            k_a = min(len(self.search_archive), k)
+            DAGs_archive = []
+            if k_a > 0:
+                for a in self.search_archive:
+                    DAGs_archive.append(cgp_2_dag(a.active_net_list()))
+            for individual in next_generation:
+                G = cgp_2_dag(individual.active_net_list())
+                neighbours_current = get_neighbours(list(DAGs.values()), G, k)
+                neighbours_archive = get_neighbours(DAGs_archive, G, k_a)
+
+                knn_val = 0
+
+                for n in neighbours_current: knn_val += n[1]
+                for n in neighbours_archive: knn_val += n[1]
+
+                individual.novelty = 100 - 100*(knn_val/(k + k_a))
+
+
 
     # Evolution CGP:
     #   At each iteration:
@@ -461,7 +535,19 @@ class CGP(object):
     #     - Mutate the best individual with neutral mutation (unchanging the active nodes)
     #         if the best individual is not updated.
     #TODO: change lam to pop_size
-    def modified_evolution(self, mutation_rate=0.01, log_file='./log.txt', arch_file='./arch.txt', load_population='', init_gen=0):
+    def modified_evolution(self, mutation_rate=0.01, log_file='./log.txt', arch_file='./arch.txt', load_population='', init_gen=0, mode='eval'):
+        
+        def stopping_criteria(mode, mean_evals):
+            if mode == 'eval':
+                return self.num_gen < self.max_eval
+            else:
+                if self.num_gen < 15: 
+                    return True
+                else:
+                    current_eval = mean_evals[len(mean_evals) - 1]
+                    previous_eval = mean_evals[len(mean_evals) - 11]
+                    return (current_eval - previous_eval)/10 > 1e-7
+        
         with open('child.txt', 'w') as fw_c :
             writer_c = csv.writer(fw_c, lineterminator='\n')
             start_time = time.time()
@@ -486,22 +572,25 @@ class CGP(object):
                             _, pool_num= self.pop[j].check_pool()
                         self.pop[j].model_name = self.basename + '_' + str(self.num_gen) + '_' + str(j) + '.hdf5'
                 
-                self._evaluation(self.pop, [True]*len(self.pop), init_flag=True)
+                if mode == 'eval':
+                    self._evaluation(self.pop, [True]*len(self.pop), init_flag=True)
+                else:
+                    self.evaluate_novelty()
             else:
                 self.load_population(load_population, init_gen)
             
-            mean_fit, max_fit = self.get_fitness_stats()
+            mean_fit, max_fit = self.get_stats(mode=mode)
             mean_evals.append(mean_fit)
             max_evals.append(max_fit)
             
             print('POPULATION INITIALIZED')
             print(self._log_data(net_info_type='active_only', start_time=start_time))
 
-            while self.num_gen < self.max_eval:
-                self.pickle_population('./p_files_netlists')
+            while stopping_criteria(mode, mean_evals):
+                self.pickle_population('./p_files_netlists', mode=mode)
                 self.num_gen += 1
                 print('GENERATION {}'.format(self.num_gen))
-                parents = self.tournament_selection(self.pop, tour_size, num_tours)
+                parents = self.tournament_selection(self.pop, tour_size, num_tours, mode=mode)
                 children = []
                 eval_flag = np.empty(len(parents)*self.lam)
 
@@ -526,11 +615,15 @@ class CGP(object):
                         child.model_name = self.basename + '_' + str(self.num_gen) + '_' + str(i*self.lam+j) + '.hdf5'
                         children.append(child)
                     
-                self._evaluation(children, eval_flag)
+                if mode == 'eval':
+                    self._evaluation(children, eval_flag)
+                    self.survivor_selection(parents, children, tour_size)
+                else:
+                    self.evaluate_novelty(next_generation=children)
+                    self.novelty_survivor_selection(parents, children, tour_size)
 
-                self.survivor_selection(parents, children, tour_size)
 
-                mean_fit, max_fit = self.get_fitness_stats()
+                mean_fit, max_fit = self.get_stats(mode=mode)
                 mean_evals.append(mean_fit)
                 max_evals.append(max_fit)
 
@@ -554,5 +647,8 @@ class CGP(object):
                 writer_a.writerow(self._log_data(net_info_type='active_only', start_time=start_time))
                 fw.close()
                 fa.close()
+            
+            print('mean evals: {}'.format(mean_evals))
+            print('max evals: {}'.format(max_evals))
 
         
