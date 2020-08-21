@@ -21,13 +21,13 @@ if __name__ == "__main__":
     #level_back = cols
     network_info = CgpInfoConvSet(rows=5, cols=30, level_back=30, min_active_num=1, max_active_num=30)
     
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('-path', type=dir_path)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-path', type=dir_path)
     
-    # args = parser.parse_args()
-    # dir_name = os.path.dirname(args.path)
+    args = parser.parse_args()
+    dir_name = os.path.dirname(args.path)
     
-    dir_name = 'C:\\Users\\tabis\\Documents\\NSERC_USRA\\datasets\\DRIVE'
+    #dir_name = 'C:\\Users\\tabis\\Documents\\NSERC_USRA\\datasets\\DRIVE'
     
     print('data path: {}'.format(dir_name))
     eval_f = CNNEvaluation(gpu_num=4, dataset_path=dir_name, img_format='*.tif', mask_format='*.tif', input_shape=(128,128,1), target_shape=(128,128,1))
