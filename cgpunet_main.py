@@ -39,7 +39,7 @@ if __name__ == "__main__":
     cgp.modified_evolution(mutation_rate=0.1, mode='novelty')
 
     #get the final population which is optimized for novelty
-    novel_populations = get_files('./p_files_netlists', '*_novelty*.p')
+    novel_populations = get_files('./p_files_netlists/', '*_novelty*.p')
     novel_populations.sort()
     init_novel_population = novel_populations[len(novel_populations) - 1]
 
