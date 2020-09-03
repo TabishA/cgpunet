@@ -342,8 +342,9 @@ class CGP(object):
                     fittest = ind
                 if self.fittest == None:
                     self.fittest = fittest
-                elif fittest.eval > self.fittest.eval:
-                    self.fittest = fittest
+                elif fittest != None:
+                    if fittest.eval > self.fittest.eval:
+                        self.fittest = fittest
             elif mode == 'novelty':
                 if ind.novelty > max_fitness:
                     max_fitness = ind.novelty

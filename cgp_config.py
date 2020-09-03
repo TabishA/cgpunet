@@ -74,10 +74,11 @@ class CNNEvaluation(object):
             print('missed models: {}'.format(missed_models))
 
             for m in missed_models:
-                print('Training {}'.format(m))
-                train = cnn.CNN_train(self.dataset_path, self.img_format, self.mask_format, verbose=self.verbose, input_shape=self.input_shape, target_shape=self.target_shape, batchsize=self.batchsize, batchsize_valid=self.batchsize_valid)
-                k = model_names.index(m)
-                return_dict[m] = train(DAG_list[k], 0, epochs[k], m)
+                #print('Training {}'.format(m))
+                #train = cnn.CNN_train(self.dataset_path, self.img_format, self.mask_format, verbose=self.verbose, input_shape=self.input_shape, target_shape=self.target_shape, batchsize=self.batchsize, batchsize_valid=self.batchsize_valid)
+                #k = model_names.index(m)
+                #return_dict[m] = train(DAG_list[k], 0, epochs[k], m)
+                return_dict[m] = 0
                 
 
         return return_dict
