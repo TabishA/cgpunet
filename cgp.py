@@ -8,9 +8,54 @@ import numpy as np
 import math
 import networkx as nx
 from cgp_2_dag import *
+from dag_2_cnn import *
 import matplotlib.pyplot as plt
 import pickle
 from knn import *
+from tensorflow.compat.v1.keras import backend as K
+import multiprocessing
+
+
+#https://stackoverflow.com/questions/43137288/how-to-determine-needed-memory-of-keras-model
+def get_model_memory_usage(net_list, batch_size, input_shape, target_shape, return_dict):
+    try:
+        model = dag_2_cnn(cgp_2_dag(net_list), 0, input_shape, target_shape, compile=False)
+    except KeyError as e:
+        print(e)
+        return 1000
+    except:
+        print(e)
+        raise
+
+    shapes_mem_count = 0
+    internal_model_mem_count = 0
+
+    for l in model.layers:
+        single_layer_mem = 1
+        out_shape = l.output_shape
+        if type(out_shape) is list:
+            out_shape = out_shape[0]
+        for s in out_shape:
+            if s is None:
+                continue
+            single_layer_mem *= s
+            
+        shapes_mem_count += single_layer_mem
+        
+    trainable_count = np.sum([K.count_params(p) for p in model.trainable_weights])
+    non_trainable_count = np.sum([K.count_params(p) for p in model.non_trainable_weights])
+    number_size = 4.0
+
+    if K.floatx() == 'float16':
+        number_size = 2.0
+    if K.floatx() == 'float64':
+        number_size = 8.0
+        
+    total_memory = number_size * (batch_size * shapes_mem_count + trainable_count + non_trainable_count)
+    gbytes = np.round(total_memory / (1024.0 ** 3), 3) + internal_model_mem_count
+    K.clear_session()
+    
+    return_dict["memory"] = gbytes
 
 # gene[f][c] f:function type, c:connection (nodeID)
 class Individual(object):
@@ -20,8 +65,9 @@ class Individual(object):
         self.gene = np.zeros((self.net_info.node_num + self.net_info.out_num, self.net_info.max_in_num + 1)).astype(int)
         self.is_active = np.empty(self.net_info.node_num + self.net_info.out_num).astype(bool)
         self.is_pool = np.empty(self.net_info.node_num + self.net_info.out_num).astype(bool)
-        self.eval = None
+        self.eval = 0
         self.epochs_trained = 0
+        self.trainable_params = 0
         self.gen_num = 0
         self.model_name = ''
         self.novelty = 0
@@ -139,14 +185,14 @@ class Individual(object):
             self.__check_course_to_out(self.net_info.node_num + n)
     
     def check_pool(self):
-        is_pool = True
-        pool_num = 0
-        for n in range(self.net_info.node_num + self.net_info.out_num):
-            if self.is_active[n]:
-                if self.gene[n][0] > 19:
-                    is_pool = False
-                    pool_num += 1
-        return is_pool, pool_num
+        G = cgp_2_dag(self.active_net_list())
+        max_pool_num = 0
+        for n in G.nodes():
+            pf = G.nodes[n]['pool_factor']
+            if pf > max_pool_num:
+                max_pool_num = pf
+        
+        return max_pool_num
 
     def __mutate(self, current, min_int, max_int):
         mutated_gene = current
@@ -229,12 +275,14 @@ class Individual(object):
                 net_list.append([type_str] + connections)
         
         return net_list
-
+    
 
 # CGP with (1 + \lambda)-ES
 class CGP(object):
-    def __init__(self, net_info, eval_func, max_eval, pop_size=100, lam=4, imgSize=256, init=False, basename = 'cgpunet_drive'):
+    def __init__(self, net_info, eval_func, max_eval, pop_size=100, lam=4, gpu_mem=16, imgSize=256, init=False, basename = 'cgpunet_drive'):
         self.lam = lam
+        #GPU memory in GB
+        self.gpu_mem = gpu_mem
         self.net_info = net_info
         self.pop_size = pop_size
         self.pop = [Individual(self.net_info, init) for _ in range(self.pop_size)]
@@ -247,6 +295,7 @@ class CGP(object):
         self.fittest = None
         self.basename = basename
         self.search_archive = []
+        self.epsilon = 0.05
     
 
     def pickle_population(self, save_dir, mode='eval'):
@@ -283,7 +332,8 @@ class CGP(object):
         fp = self.eval_func(DAG_list, num_epochs_list, model_names)
         for i, j in enumerate(active_index):
             pop[j].gen_num = self.num_gen
-            pop[j].eval = fp[pop[j].model_name]
+            pop[j].eval = fp[pop[j].model_name][0]
+            pop[j].trainable_params = fp[pop[j].model_name][1]
             pop[j].epochs_trained = num_epochs
         
         evaluations = np.zeros(len(pop))
@@ -337,9 +387,17 @@ class CGP(object):
         fittest = None
         for ind in individuals:
             if mode=='eval':
-                if ind.eval > max_fitness:
+                if ind.eval - max_fitness >= self.epsilon:
                     max_fitness = ind.eval
                     fittest = ind
+                elif abs(ind.eval - max_fitness) <= self.epsilon:
+                    if fittest == None:
+                        max_fitness = ind.eval
+                        fittest = ind
+                    elif ind.trainable_params < fittest.trainable_params:
+                        max_fitness = ind.eval
+                        fittest = ind
+                
                 if self.fittest == None:
                     self.fittest = fittest
                 elif fittest != None:
@@ -409,8 +467,9 @@ class CGP(object):
         while len(next_gen) < len(parents):
             tournament = np.random.choice(total_pool, tour_size, replace=False)
             fittest = self.get_fittest(tournament)
-            if fittest not in next_gen and fittest.eval != 0:
-                next_gen.append(fittest)
+            if fittest != None:
+                if fittest not in next_gen and fittest.eval != 0:
+                    next_gen.append(fittest)
 
         for p in parents:
             if p in self.pop:
@@ -473,7 +532,7 @@ class CGP(object):
         return np.mean(evals), np.max(evals)
     
 
-    def plot_evals(self, mean_evals, max_evals):
+    def plot_evals(self, mean_evals, max_evals, mode='eval'):
         pickle.dump(mean_evals, open("mean_evals.p", "wb"))
         pickle.dump(max_evals, open("max_evals.p", "wb"))
         
@@ -493,7 +552,7 @@ class CGP(object):
         plt.xlabel('Generation')
         plt.ylabel('F1 Score')
         plt.legend(['Mean Fitness', 'Max Fitness'], loc='upper left')
-        plt.savefig('cgpunet_drive_fitness.png')
+        plt.savefig('cgpunet_drive_{}.png'.format(mode))
         plt.close()
 
     
@@ -528,6 +587,19 @@ class CGP(object):
 
                 individual.novelty = 100 - 100*(knn_val/(k + k_a))
 
+
+    def check_memory(self, individual):
+        manager = multiprocessing.Manager()
+        return_dict = manager.dict()
+
+        arguments = (individual.active_net_list(), self.eval_func.batchsize, self.eval_func.input_shape, self.eval_func.target_shape, return_dict)
+        p = multiprocessing.Process(target=get_model_memory_usage, args=arguments)
+        p.start()
+        p.join()
+
+        mem = return_dict["memory"]
+        
+        return mem >= self.gpu_mem
 
 
     # Evolution CGP:
@@ -566,11 +638,11 @@ class CGP(object):
                 for i in np.arange(0, len(self.pop), self.lam):
                     for j in range(i, min(i + self.lam, len(self.pop))):
                         active_num = self.pop[j].count_active_node()
-                        _, pool_num = self.pop[j].check_pool()
-                        while active_num < self.pop[j].net_info.min_active_num or pool_num > self.max_pool_num:
+                        pool_num = self.pop[j].check_pool()
+                        while active_num < self.pop[j].net_info.min_active_num or pool_num > self.max_pool_num or self.check_memory(self.pop[j]):
                             self.pop[j].mutation(1.0)
                             active_num = self.pop[j].count_active_node()
-                            _, pool_num= self.pop[j].check_pool()
+                            pool_num= self.pop[j].check_pool()
                         self.pop[j].model_name = self.basename + '_' + str(self.num_gen) + '_' + str(j) + '.hdf5'
                 
                 if mode == 'eval':
@@ -605,13 +677,13 @@ class CGP(object):
                         child = Individual(self.net_info, self.init)
                         child.copy(p)
                         active_num = child.count_active_node()
-                        _, pool_num = child.check_pool()
+                        pool_num = child.check_pool()
                         # mutation (forced mutation)
-                        while not eval_flag[i*self.lam + j] or active_num < child.net_info.min_active_num or pool_num > self.max_pool_num:
+                        while not eval_flag[i*self.lam + j] or active_num < child.net_info.min_active_num or pool_num > self.max_pool_num or self.check_memory(self.pop[j]):
                             child.copy(p)
                             eval_flag[i*self.lam + j] = child.mutation(mutation_rate)
                             active_num = child.count_active_node()
-                            _, pool_num = child.check_pool()
+                            pool_num = child.check_pool()
                         
                         child.model_name = self.basename + '_' + str(self.num_gen) + '_' + str(i*self.lam+j) + '.hdf5'
                         children.append(child)
@@ -628,7 +700,7 @@ class CGP(object):
                 mean_evals.append(mean_fit)
                 max_evals.append(max_fit)
 
-                self.plot_evals(mean_evals, max_evals)
+                self.plot_evals(mean_evals, max_evals, mode)
                 
                 # save
                 f = open('arch_child.txt', 'a')

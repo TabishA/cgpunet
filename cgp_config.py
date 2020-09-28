@@ -17,7 +17,7 @@ def cnn_eval(dag, gpu_id, epoch_num, batchsize, batchsize_valid, dataset_path, i
         evaluation = train(dag, gpu_id, epoch_num=epoch_num, out_model=out_model)
     except Exception as e:
         print(e)
-        evaluation = 0
+        evaluation = (0, 0)
     print('\tgpu_id:', gpu_id, 'model_name: ', out_model, ', eval:', evaluation)
     return_dict[out_model] = evaluation
 
@@ -78,7 +78,7 @@ class CNNEvaluation(object):
                 #train = cnn.CNN_train(self.dataset_path, self.img_format, self.mask_format, verbose=self.verbose, input_shape=self.input_shape, target_shape=self.target_shape, batchsize=self.batchsize, batchsize_valid=self.batchsize_valid)
                 #k = model_names.index(m)
                 #return_dict[m] = train(DAG_list[k], 0, epochs[k], m)
-                return_dict[m] = 0
+                return_dict[m] = (0, 0)
                 
 
         return return_dict

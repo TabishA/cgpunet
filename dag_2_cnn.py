@@ -3,12 +3,15 @@
 from cgp_2_dag import *
 import tensorflow as tf
 from blocks import *
+#from keras.models import *
 from tensorflow.keras.models import *
+#from keras.optimizers import Adam
 from tensorflow.keras.optimizers import Adam
 import tensorflow.keras.metrics as metrics
 import re
 import os
 
+tf.random.set_seed(1)
 
 def traverse(dag, successor, modules):
     preds = list(dag.predecessors(successor))
@@ -24,7 +27,8 @@ def traverse(dag, successor, modules):
 
     if len(preds) == 1:
         
-        if not preds[0] in m_keys: 
+        if not preds[0] in m_keys:
+            print('preds[0] not in keys: {}'.format(preds[0])) 
             modules = traverse(dag, preds[0], modules)
         
         if re.search("^ConvBlock.*", function):
@@ -48,6 +52,12 @@ def traverse(dag, successor, modules):
         elif re.search("^Avg_Pool.*", function):
             modules[successor] = AveragePooling2D(pool_size=(2, 2), name=successor)(modules[preds[0]])
             print('connecting {} to {}'.format(modules[successor], modules[preds[0]]))
+        elif re.search("^Sum.*", function):
+            modules[successor] = MergeBlock(modules[preds[0]], modules[preds[0]], mode='add', block_name=successor)
+            print('connecting {} to {} and {}'.format(modules[successor], modules[preds[0]], modules[preds[0]]))
+        elif re.search("^Concat.*", function):
+            modules[successor] = MergeBlock(modules[preds[0]], modules[preds[0]], mode='concat', block_name=successor)
+            print('connecting {} to {} and {}'.format(modules[successor], modules[preds[0]], modules[preds[0]]))
     elif len(preds) == 2:
         if not preds[0] in m_keys: 
             modules = traverse(dag, preds[0], modules)
@@ -68,8 +78,7 @@ def traverse(dag, successor, modules):
     return modules
 
 
-#TODO: test if tf.device('/gpu:{}') actually works
-def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1), pretrained_weights = None):
+def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1), pretrained_weights = None, compile=True):
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpuID)
     nodes = list(dag.nodes())
     
@@ -96,7 +105,8 @@ def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1), pre
         
         #NOTE: mean iou removed from metrics 21/07/2020
         model = Model(inputs=modules['input_0_0'], outputs=output)
-        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy', metrics.Precision(), metrics.Recall(), metrics.TruePositives(), metrics.TrueNegatives(), metrics.FalsePositives(), metrics.FalseNegatives(), metrics.AUC()])
+        if compile:
+            model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy', metrics.Precision(), metrics.Recall(), metrics.TruePositives(), metrics.TrueNegatives(), metrics.FalsePositives(), metrics.FalseNegatives(), metrics.AUC()])
         #model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
         
         if pretrained_weights:

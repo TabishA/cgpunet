@@ -4,7 +4,9 @@ import os
 import sys
 from dag_2_cnn import *
 from tensorflow.compat.v1.keras import backend as K
+#from keras import backend as K
 from tensorflow.keras.callbacks import ModelCheckpoint, History
+#from keras.callbacks import ModelCheckpoint, History
 from DataGenerator import *
 import matplotlib.pyplot as plt
 
@@ -94,6 +96,7 @@ class CNN_train():
         val_recall = history.history['val_recall']
 
         val_f1 = 2*((val_precision[0]*val_recall[0])/(val_precision[0]+val_recall[0]+K.epsilon()))
+        trainable_count = int(np.sum([K.count_params(p) for p in model.trainable_weights]))
 
         if not os.path.isdir('./figures'):
             os.makedirs('./figures')
@@ -133,4 +136,4 @@ class CNN_train():
 
         K.clear_session()
 
-        return float(val_f1)
+        return (float(val_f1), trainable_count)
