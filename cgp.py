@@ -514,7 +514,8 @@ class CGP(object):
         assert(len(parent_pool) == len(fp))
         
         for i in range(len(fp)):
-            parent_pool[i].eval = fp[parent_pool[i].model_name]
+            parent_pool[i].eval = fp[parent_pool[i].model_name][0]
+            parent_pool[i].trainable_params = fp[parent_pool[i].model_name][1]
             parent_pool[i].epochs_trained = num_epochs_list[i]
     
 
