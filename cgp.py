@@ -374,12 +374,13 @@ class CGP(object):
 
     
     def num_epochs_scheduler(self, eval_num, max_eval, max_epochs, min_epochs=5):
-        intervals = np.arange(min_epochs, max_epochs + 1, 20)
-        num_epochs = min_epochs
-        for i in intervals:
-            if i <= ((eval_num + 10)/max_eval)*max_epochs: num_epochs = i
+        #intervals = np.arange(min_epochs, max_epochs + 1, 20)
+        #num_epochs = min_epochs
+        #for i in intervals:
+        #    if i <= ((eval_num + 10)/max_eval)*max_epochs: num_epochs = i
         
-        return min(num_epochs, max_epochs)
+        #return min(num_epochs, max_epochs)
+        return min_epochs
 
     
     def get_fittest(self, individuals, mode='eval'):
