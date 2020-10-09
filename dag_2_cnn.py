@@ -20,6 +20,8 @@ def traverse(dag, successor, modules):
     function = func_dict['function']
 
     m_keys = list(modules.keys())
+
+    if successor in m_keys: return modules
     
     #print('modules: {}'.format(modules))
     #  if successor in list(modules.keys()):

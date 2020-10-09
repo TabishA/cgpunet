@@ -75,16 +75,21 @@ def merge_nodes(G, node1, node2, mode='concat'):
     return G
 
 
+def get_leaves(G):
+    G_nodes = G.nodes()
+    leaves = [x for x in G_nodes if G.out_degree(x)==0 and G.in_degree(x)>0]
+    return leaves
+
 
 #appending output layers to obtain desired output size
 def append_output_layers(G, out_channels = 1, mirror=False):
     G_nodes = G.nodes()
     if not mirror:
-        leaves = [x for x in G_nodes if G.out_degree(x)==0 and G.in_degree(x)>0]
+        leaves = get_leaves(G)
 
         while len(leaves) > 1:
             G = merge_nodes(G, leaves[0], leaves[1], mode='concat')
-            leaves = [x for x in G_nodes if G.out_degree(x)==0 and G.in_degree(x)>0]
+            leaves = get_leaves(G)
           
         if len(leaves) < 1: sys.exit('no leaves - cyclic graph: {}'.format(len(leaves)))
         
@@ -118,6 +123,18 @@ def append_output_layers(G, out_channels = 1, mirror=False):
             G.add_edge(node_list[leaf_id], out_node, num_channels = leaf_channels, pool_factor = leaf_pool_factor)
             leaf_id += 1
 
+        leaves = get_leaves(G)
+        leaf = leaves[0]
+        leaf_id = int(G.nodes[leaf]['id'])
+        leaf_channels = int(G.nodes[leaf]['num_channels'])
+        leaf_pool_factor = int(G.nodes[leaf]['pool_factor'])
+
+        if not re.search("^S_ConvBlock_.*", leaf):
+            out_node = 'S_ConvBlock_' + str(out_channels) + '_1_' + str(leaf_id) + '_' + str(leaf_id)
+            G.add_node(out_node, num_channels=out_channels, pool_factor=0, id=leaf_id+1)
+            node_list = list(G.nodes())
+            G.add_edge(node_list[leaf_id], out_node, num_channels = leaf_channels, pool_factor = leaf_pool_factor)
+        
         return G
     
     else:#mirror = True
