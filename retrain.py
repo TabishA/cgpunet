@@ -78,6 +78,6 @@ model.summary()
 
 model_checkpoint = ModelCheckpoint('./cgpunet_drive_6_15_full.hdf5', monitor='loss',verbose=1, save_best_only=True)
 early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1, mode='auto', restore_best_weights=True)
-model.fit_generator(generator=trainGenerator, steps_per_epoch=int(len(train_imgs)/16), epochs=100, callbacks=[model_checkpoint, early_stopping], validation_data=validGenerator, validation_steps=int(len(valid_imgs)/16), validation_freq=1, use_multiprocessing=True, workers=22)
+model.fit(trainGenerator, steps_per_epoch=int(len(train_imgs)/16), epochs=100, callbacks=[model_checkpoint, early_stopping], validation_data=validGenerator, validation_steps=int(len(valid_imgs)/16), validation_freq=1, use_multiprocessing=True, workers=22)
 
 

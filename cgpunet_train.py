@@ -2,6 +2,7 @@
 
 import os
 import sys
+
 from dag_2_cnn import *
 from tensorflow.compat.v1.keras import backend as K
 # from keras import backend as K
@@ -89,9 +90,9 @@ class CNN_train():
 
         # NOTE: default values: workers=1, multiprocessing=False.
         # TODO: investigate workers>1
-        history = model.fit_generator(generator=self.trainGenerator, steps_per_epoch=train_steps, epochs=epoch_num,
-                                      callbacks=[model_checkpoint], validation_data=self.validGenerator,
-                                      validation_steps=valid_steps, validation_freq=int(epoch_num))
+        history = model.fit(self.trainGenerator, steps_per_epoch=train_steps, epochs=epoch_num,
+                            callbacks=[model_checkpoint], validation_data=self.validGenerator,
+                            validation_steps=valid_steps, validation_freq=int(epoch_num))
 
         val_acc = history.history['val_accuracy']
         # val_loss = history.history['val_loss']
@@ -100,41 +101,42 @@ class CNN_train():
 
         val_f1 = 2 * ((val_precision[0] * val_recall[0]) / (val_precision[0] + val_recall[0] + K.epsilon()))
         trainable_count = int(np.sum([K.count_params(p) for p in model.trainable_weights]))
-
-        if not os.path.isdir('./figures'):
-            os.makedirs('./figures')
-
-        acc_fig_name = out_model.replace('.hdf5', '_acc.png')
-        acc_fig_name = './figures/' + acc_fig_name
-
-        loss_fig_name = out_model.replace('.hdf5', '_loss.png')
-        loss_fig_name = './figures/' + loss_fig_name
+        #
+        # if not os.path.isdir('./figures'):
+        #     os.makedirs('./figures')
+        #
+        # acc_fig_name = out_model.replace('.hdf5', '_acc.png')
+        # acc_fig_name = './figures/' + acc_fig_name
+        #
+        # loss_fig_name = out_model.replace('.hdf5', '_loss.png')
+        # loss_fig_name = './figures/' + loss_fig_name
 
         # Plot training & validation accuracy values
-        plt.figure()
-        plt.plot(history.history['accuracy'])
-        plt.plot(history.history['val_accuracy'])
-        plt.title('Model accuracy: {}'.format(out_model))
-        plt.ylabel('Accuracy')
-        plt.xlabel('Epoch')
-        plt.legend(['Train', 'Validation'], loc='upper left')
-        plt.savefig(acc_fig_name)
+        # plt.figure()
+        # plt.plot(history.history['accuracy'])
+        # plt.plot(history.history['val_accuracy'])
+        # plt.title('Model accuracy: {}'.format(out_model))
+        # plt.ylabel('Accuracy')
+        # plt.xlabel('Epoch')
+        # plt.legend(['Train', 'Validation'], loc='upper left')
+        # plt.savefig(acc_fig_name)
+        #
+        # plt.figure()
+        # plt.plot(history.history['loss'])
+        # plt.plot(history.history['val_loss'])
+        # plt.title('Model loss": {}'.format(out_model))
+        # plt.ylabel('Loss')
+        # plt.xlabel('Epoch')
+        # plt.legend(['Train', 'Validation'], loc='upper left')
+        # plt.savefig(loss_fig_name)
 
-        plt.figure()
-        plt.plot(history.history['loss'])
-        plt.plot(history.history['val_loss'])
-        plt.title('Model loss": {}'.format(out_model))
-        plt.ylabel('Loss')
-        plt.xlabel('Epoch')
-        plt.legend(['Train', 'Validation'], loc='upper left')
-        plt.savefig(loss_fig_name)
 
-        pickle_name = out_model.replace('.hdf5', '.gpickle')
+        pickle_name = out_model.split('/')[2].replace('.hdf5', '.gpickle')
+        dir_name = out_model.split('/')[0]+'/p_files'
+        if not os.path.isdir(dir_name):
+            os.makedirs(dir_name)
 
-        if not os.path.isdir('./p_files'):
-            os.makedirs('./p_files')
-
-        pickle_name = './p_files/' + pickle_name
+        pickle_name = dir_name + pickle_name
         nx.write_gpickle(dag, pickle_name)
 
         K.clear_session()

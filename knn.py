@@ -15,10 +15,10 @@ def calculate_distance(pop, ind):
 def check_local_neighbor(pop, candidate, neighbor):
     distances = calculate_distance(pop, neighbor)
     max_similarity = distances[0][1]
-    print("Best similarity is {} with model {}".format(max_similarity, distances[0][0]))
+    print("Best similarity is {}".format(max_similarity))
     for item in distances:
         if item[0] == candidate:
-            print("Similarity with model {} is {}".format(candidate, item[1]))
+            print("Similarity with current model is {}".format(item[1]))
             return item[1] == max_similarity
 
         # Locate the most similar neighbors

@@ -257,7 +257,7 @@ def cgp_2_dag(net_list, mirror=False):
             connect_index = int(sub_elements[len(sub_elements) - 2])
             in_node = node_list[connect_index]
 
-            print('node: {}, in_node: {}'.format(node, in_node))
+            # print('node: {}, in_node: {}'.format(node, in_node))
 
             if op == 'input':
                 # print('HELLO INPUT NODE')
