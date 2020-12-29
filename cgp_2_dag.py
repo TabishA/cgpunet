@@ -221,7 +221,7 @@ def increment_duplicate_index(elem, i):
 
 # TODO: input shape as args
 def cgp_2_dag(net_list, mirror=False):
-    # print('Individual: {}'.format(net_list))
+    print('Individual: {}'.format(net_list))
 
     #create an empty graph structure with no nodes and no edges
     G = nx.MultiDiGraph()

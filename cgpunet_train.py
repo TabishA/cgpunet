@@ -130,13 +130,12 @@ class CNN_train():
         # plt.legend(['Train', 'Validation'], loc='upper left')
         # plt.savefig(loss_fig_name)
 
-
         pickle_name = out_model.split('/')[2].replace('.hdf5', '.gpickle')
-        dir_name = out_model.split('/')[0]+'/p_files'
+        dir_name = out_model.split('/')[0] + '/p_files'
         if not os.path.isdir(dir_name):
             os.makedirs(dir_name)
 
-        pickle_name = dir_name + pickle_name
+        pickle_name = dir_name + '/' + pickle_name
         nx.write_gpickle(dag, pickle_name)
 
         K.clear_session()
