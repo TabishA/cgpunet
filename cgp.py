@@ -58,7 +58,7 @@ def get_model_memory_usage(net_list, batch_size, input_shape, target_shape, retu
     K.clear_session()
 
     return_dict["memory"] = gbytes
-    print('Memory Used {}'.format(gbytes))
+    print('Model memory {}'.format(gbytes))
 
 
 # gene[f][c] f:function type, c:connection (nodeID)
@@ -75,6 +75,7 @@ class Individual(object):
         self.gen_num = 0
         self.model_name = ''
         self.novelty = 0
+        self.model_mem = 0
         if init:
             print('init with specific architectures')
             self.init_gene_with_conv()  # In the case of starting only convolution
@@ -267,6 +268,7 @@ class Individual(object):
         self.gene = source.gene.copy()
         self.is_active = source.is_active.copy()
         self.eval = source.eval
+        self.model_mem = source.model_mem
 
     def active_net_list(self):
         net_list = [["input", 0, 0]]
@@ -318,13 +320,15 @@ class CGP(object):
         except:
             pass
 
-    def pickle_state_annealing(self, save_dir, candidate_number, current_temp):
+    def pickle_state_annealing(self, save_dir, candidate_number, current_temp, max_temp, final_temp, alpha, cooling,
+                               consider_neutral, log_dir, mutation_rate):
         if not os.path.isdir(save_dir):
             os.makedirs(save_dir)
-        p_name = os.path.join(save_dir, 'annealing_' + str(candidate_number) + '_' + str(current_temp) + '.p')
+        p_name = os.path.join(save_dir, 'annealing_' + str(current_temp) + '.p')
 
         try:
-            pickle.dump([self.pop, candidate_number, current_temp], open(p_name, "wb"))
+            pickle.dump([self.pop, candidate_number, current_temp, max_temp, final_temp, alpha, cooling,
+                         consider_neutral, log_dir, mutation_rate], open(p_name, "wb"))
         except:
             pass
 
@@ -366,7 +370,7 @@ class CGP(object):
             self.num_eval += len(DAG_list)
         return evaluations
 
-    def _log_data(self, net_info_type='active_only', start_time=0):
+    def _log_data(self, net_info_type='active_only', start_time=0.0):
         log_list = [self.num_gen, self.num_eval, time.time() - start_time, self.pop[0].eval,
                     self.pop[0].count_active_node()]
         if net_info_type == 'active_only':
@@ -377,7 +381,8 @@ class CGP(object):
             pass
         return log_list
 
-    def _log_state(self, log_dir, index, neighborFitness=[], timeElapsed=[], current_temp=100, probability=[]):
+    def _log_state(self, log_dir, index, neighborFitness=[0.0] * 8, timeElapsed=[0.0] * 8, current_temp=100,
+                   probability=[0.0] * 8):
         dir_path = os.path.join(os.getcwd(), log_dir)
         if not os.path.isdir(dir_path):
             try:
@@ -395,22 +400,26 @@ class CGP(object):
         ffit = open(os.path.join(dir_path, 'fitness_trend.txt'), 'a')
         writerfit = csv.writer(ffit, lineterminator='\n')
 
-        specs = [current_temp]
-        for i in range(len(self.pop)):
-            specs.append(self.pop[i].eval)
+        candidate_fitness = []
+        candidate_memory = []
+        for i in range(self.lam):
+            candidate_fitness.append(self.pop[index + i].eval)
+            candidate_memory.append(self.pop[index + i].model_mem)
             netlist = [i + index, current_temp, self.pop[i].active_net_list()]
             writera.writerow(netlist)
             full_netlist = [i + index, current_temp, self.pop[i].gene.flatten().tolist()]
             writerf.writerow(full_netlist)
 
+        specs = [current_temp] + candidate_fitness
         writerfit.writerow(specs)
-
-        for i in range(len(self.pop)):
-            specs.append(timeElapsed[i])
-        for i in range(len(self.pop)):
-            specs.append(neighborFitness[i])
-        for i in range(len(self.pop)):
-            specs.append(probability[i])
+        for x in neighborFitness:
+            specs.append(x)
+        for x in candidate_memory:
+            specs.append(x)
+        for x in probability:
+            specs.append(x)
+        for x in timeElapsed:
+            specs.append(x)
         writerspecs.writerow(specs)
 
         fa.close()
@@ -420,7 +429,7 @@ class CGP(object):
 
         return specs[0:5]
 
-    def _log_data_children(self, net_info_type='active_only', start_time=0, pop=None):
+    def _log_data_children(self, net_info_type='active_only', start_time=0.0, pop=None):
         log_list = [self.num_gen, self.num_eval, time.time() - start_time, pop.eval, pop.count_active_node()]
         if net_info_type == 'active_only':
             log_list.append(pop.active_net_list())
@@ -565,7 +574,7 @@ class CGP(object):
         DAG_list = []
         model_names = []
         for p in parent_pool:
-            assert (p.model_name)
+            assert p.model_name
             model_names.append(p.model_name)
             pickle_name = p.model_name.replace('.hdf5', '.gpickle')
             pickle_name = './p_files/' + pickle_name
@@ -654,6 +663,7 @@ class CGP(object):
         p.join()
 
         mem = return_dict["memory"]
+        individual.model_mem = mem
         print('Model memory exceeds gpu memory : {}'.format(mem >= self.gpu_mem))
         return mem >= self.gpu_mem
 
@@ -789,35 +799,54 @@ class CGP(object):
             print('mean evals: {}'.format(mean_evals))
             print('max evals: {}'.format(max_evals))
 
-    def plot_sa(self, fitness, temperature):
-
-        for index, fit_values in fitness:
-            plt.figure()
-            plt.errorbar(x=temperature, y=fit_values)
-            plt.title('Fitness vs Temperature for Candidate ' + str(index))
-            plt.xlabel('Temperature')
-            plt.ylabel('Fitness')
-            plt.savefig('annealing_candidate{}.png'.format(index))
-            plt.close()
-
-    def simulated_annealing(self, candidate_index=0, mutation_rate=0.01, current_temp=100, final_temp=0.5,
-                            alpha=0.5, K=100, log_dir='SA', load=False, load_file='', timestamp='',
-                            consider_neutral=False):
+    def simulated_annealing(self, candidate_index=0, mutation_rate=0.01, start_temp=100, final_temp=0.5,
+                            alpha=0.5, log_dir='SA', load=False, load_file='', timestamp='',
+                            consider_neutral=False, cooling='linear'):
 
         log_dir = log_dir + str(mutation_rate) + '_' + timestamp
+        print("log Dir {}".format(log_dir))
+        current_temp = start_temp
+
         if load:
             loaded_state = pickle.load(open(load_file, "rb"))
             self.pop = loaded_state[0]
             self.pop_size = len(self.pop)
             candidate_index = loaded_state[1]
-            current_temp = loaded_state[2] - alpha
+            start_temp = loaded_state[3]
+            final_temp = loaded_state[4]
+            alpha = loaded_state[5]
+            cooling = loaded_state[6]
+            if cooling == 'linear':
+                current_temp = loaded_state[2] - alpha
+            elif cooling == 'exp':
+                current_temp = loaded_state[2] * math.pow(alpha, 1)
+            consider_neutral = loaded_state[7]
+            log_dir = loaded_state[8]
+            mutation_rate = loaded_state[9]
+
+        else:
+            # Create directories
+            if not os.path.isdir(os.path.join(os.getcwd(), log_dir)):
+                try:
+                    os.makedirs(os.path.join(os.getcwd(), log_dir))
+                except OSError as e:
+                    print(e)
+                    return
+            if not os.path.isdir(os.path.join(os.getcwd(), log_dir + "/models")):
+                try:
+                    os.makedirs(os.path.join(os.getcwd(), log_dir + "/models"))
+                except OSError as e:
+                    print(e)
+                    return
+
         for candidate_number in range(candidate_index, len(self.pop), self.lam):
             while current_temp > final_temp:
                 print("Current Temp is {}".format(current_temp))
                 neighbors = []
                 process_time = []
-                eval_flag = np.empty(self.lam, dtype=bool)
-                mutated = np.empty(self.lam, dtype=bool)
+                attempts = [0, 0, 0, 0]
+                eval_flag = np.empty(self.lam, dtype=bool)  # To keep track active mutation
+                mutated = np.empty(self.lam, dtype=bool)  # To keep track of neutral mutation
                 DAGs = dict()
                 for p in self.pop:
                     print("Fitness {}".format(p.eval))
@@ -825,17 +854,16 @@ class CGP(object):
 
                 for j in range(min(self.lam, len(self.pop) - candidate_number)):
                     print("Currently Processing candidate number {}".format(candidate_number + j))
-
                     start_time = time.time()
                     eval_flag[j] = False
                     mutated[j] = False
                     neighbor_not_found = True
                     mutant = Individual(self.net_info, self.init)
-                    attempts = 0
+                    attempts[j] = 0
                     # mutation (forced mutation)
                     while neighbor_not_found:
-                        print("Attempt {}".format(attempts))
-                        if attempts > 150:
+                        print("Attempt {}".format(attempts[j]))
+                        if attempts[j] > 150:
                             print("Mutant could not be generated")
                             break
                         mutant.copy(self.pop[candidate_number + j])
@@ -845,12 +873,10 @@ class CGP(object):
 
                         if consider_neutral:
                             neighbor_not_found = not mutated[j] or active_num < mutant.net_info.min_active_num or \
-                                                 pool_num > self.max_pool_num or self.check_memory(
-                                self.pop[candidate_number + j])
+                                                 pool_num > self.max_pool_num or self.check_memory(mutant)
                         else:
                             neighbor_not_found = not eval_flag[j] or active_num < mutant.net_info.min_active_num or \
-                                                 pool_num > self.max_pool_num or self.check_memory(
-                                self.pop[candidate_number + j])
+                                                 pool_num > self.max_pool_num or self.check_memory(mutant)
 
                         # If the generated mutant is valid, then check if it is a local neighbor
                         if not neighbor_not_found:
@@ -861,9 +887,30 @@ class CGP(object):
                                                         DAG_mutant[mutant]):
                                 print("Mutant is not a local neighbor")
                                 neighbor_not_found = True
-                        attempts += 1
+                        attempts[j] += 1
 
-                    if attempts > 150:
+                    if attempts[j] > 150 and not consider_neutral:  # If a mutant cannot be produced by forced
+                        # mutation, try neutral
+                        while neighbor_not_found:
+                            if attempts[j] > 200:
+                                break
+                            eval_flag[j], mutated[j] = mutant.mutation(mutation_rate)
+                            active_num = mutant.count_active_node()
+                            pool_num = mutant.check_pool()
+                            neighbor_not_found = not mutated[j] or active_num < mutant.net_info.min_active_num or \
+                                                 pool_num > self.max_pool_num or self.check_memory(mutant)
+                            # If the generated mutant is valid, then check if it is a local neighbor
+                            if not neighbor_not_found:
+                                print("Checking Neighborhood")
+                                DAG_mutant = dict()
+                                DAG_mutant[mutant] = cgp_2_dag(mutant.active_net_list())
+                                if not check_local_neighbor(list(DAGs.values()), DAGs[self.pop[candidate_number + j]],
+                                                            DAG_mutant[mutant]):
+                                    print("Mutant is not a local neighbor")
+                                    neighbor_not_found = True
+                            attempts[j] += 1
+
+                    if attempts[j] > 200:
                         mutant.copy(self.pop[candidate_number + j])
                         eval_flag[j] = False
 
@@ -873,19 +920,22 @@ class CGP(object):
                         mutant.epochs_trained = self.pop[candidate_number + j].epochs_trained
                         mutant.trainable_params = self.pop[candidate_number + j].trainable_params
 
-                    mutant.model_name = log_dir + "/models/"+self.basename + '_' + str(candidate_number + j) + '_' + str(
-                        current_temp) + '.hdf5'
+                    mutant.model_name = log_dir + "/models/" + self.basename + '_' + str(candidate_number + j) + '_' + \
+                                        str(current_temp) + '.hdf5'
                     neighbors.append(mutant)
                     process_time.append(time.time() - start_time)
 
                 # Evaluate the generated mutants
                 print("Evaluating the neighbors")
                 neighbor_fitness = self._evaluation(neighbors, eval_flag)
-                print("Fitness of neighbors")
-                print(neighbor_fitness)
+                print("Summary of Neighbors generated")
+                print("Fitness : {}".format(neighbor_fitness))
+                print("Model Memory : {}".format([neighbors[x].model_mem for x in range(len(neighbors))]))
+                print("Attempts to generate mutant : {}".format(attempts))
+
                 # Check if neighbor is best so far
                 prob = [1.0, 1.0, 1.0, 1.0]
-                for index in range(len(neighbor_fitness)):
+                for index in range(self.lam):
                     if neighbor_fitness[index] != 0:
 
                         cost_diff = neighbor_fitness[index] - self.pop[candidate_number + index].eval
@@ -896,7 +946,7 @@ class CGP(object):
                         # if the new solution is not better, accept it with a probability of e^(-cost/temp)
                         else:
                             r = random.uniform(0, 1)
-                            ac = math.exp(cost_diff / (current_temp / K))
+                            ac = math.exp(cost_diff / (current_temp / start_temp))
                             prob[index] = ac
                             print('Cost difference : {}'.format(cost_diff))
                             print("{} < {}".format(r, ac))
@@ -908,8 +958,12 @@ class CGP(object):
                                       neighborFitness=neighbor_fitness, timeElapsed=process_time, probability=prob))
 
                 # save the current population
-                self.pickle_state_annealing(log_dir + '/sa_files_netlists', candidate_number, current_temp)
+                self.pickle_state_annealing(log_dir + '/sa_files_netlists', candidate_number, current_temp, start_temp,
+                                            final_temp, alpha, cooling, consider_neutral, log_dir, mutation_rate)
 
                 # decrement the temperature
-                # current_temp -= alpha
-                current_temp = current_temp * math.pow(alpha, 1)
+                if cooling == 'linear':
+                    current_temp -= alpha
+                elif cooling == 'exp':
+                    current_temp = current_temp * math.pow(alpha, 1)
+            current_temp = start_temp
