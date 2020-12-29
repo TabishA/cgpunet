@@ -20,8 +20,6 @@ def traverse(dag, successor, modules):
     function = func_dict['function']
 
     m_keys = list(modules.keys())
-
-    if successor in m_keys: return modules
     
     #print('modules: {}'.format(modules))
     #  if successor in list(modules.keys()):
@@ -29,8 +27,7 @@ def traverse(dag, successor, modules):
 
     if len(preds) == 1:
         
-        if not preds[0] in m_keys:
-            print('preds[0] not in keys: {}'.format(preds[0])) 
+        if not preds[0] in m_keys: 
             modules = traverse(dag, preds[0], modules)
         
         if re.search("^ConvBlock.*", function):
@@ -80,7 +77,8 @@ def traverse(dag, successor, modules):
     return modules
 
 
-def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1), pretrained_weights = None, compile=True):
+#TODO: test if tf.device('/gpu:{}') actually works
+def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1), pretrained_weights = None):
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpuID)
     nodes = list(dag.nodes())
     
@@ -107,8 +105,7 @@ def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1), pre
         
         #NOTE: mean iou removed from metrics 21/07/2020
         model = Model(inputs=modules['input_0_0'], outputs=output)
-        if compile:
-            model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy', metrics.Precision(), metrics.Recall(), metrics.TruePositives(), metrics.TrueNegatives(), metrics.FalsePositives(), metrics.FalseNegatives(), metrics.AUC()])
+        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy', metrics.Precision(), metrics.Recall(), metrics.TruePositives(), metrics.TrueNegatives(), metrics.FalsePositives(), metrics.FalseNegatives(), metrics.AUC()])
         #model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
         
         if pretrained_weights:
