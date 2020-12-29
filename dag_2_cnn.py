@@ -78,7 +78,7 @@ def traverse(dag, successor, modules):
 
 
 #TODO: test if tf.device('/gpu:{}') actually works
-def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1), pretrained_weights = None):
+def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1), pretrained_weights = None, compile=True):
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpuID)
     nodes = list(dag.nodes())
     
@@ -105,8 +105,10 @@ def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1), pre
         
         #NOTE: mean iou removed from metrics 21/07/2020
         model = Model(inputs=modules['input_0_0'], outputs=output)
-        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy', metrics.Precision(), metrics.Recall(), metrics.TruePositives(), metrics.TrueNegatives(), metrics.FalsePositives(), metrics.FalseNegatives(), metrics.AUC()])
-        #model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+        
+        if compile:
+            model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy', metrics.Precision(), metrics.Recall(), metrics.TruePositives(), metrics.TrueNegatives(), metrics.FalsePositives(), metrics.FalseNegatives(), metrics.AUC()])
+        
         
         if pretrained_weights:
             model.load_weights(pretrained_weights)
