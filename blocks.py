@@ -77,7 +77,7 @@ def ConvBlock(filters, kernel_size, use_batchnorm=True, conv_name='conv'):
         x = Conv2D(filters, kernel_size, padding="same", name=conv_name + '_Conv2D', kernel_initializer='he_normal', use_bias=not(use_batchnorm))(x)
         if use_batchnorm:
             x = BatchNormalization(axis=3, name=conv_name + '_bn')(x)
-        if kernel_size == (1, 1):
+        if filters == 1:
             x = Activation('sigmoid', name=conv_name + '_sigmoid')(x)
         else:
             x = Activation('relu', name=conv_name + '_relu')(x)
