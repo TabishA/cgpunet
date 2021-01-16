@@ -295,7 +295,7 @@ class CGP(object):
         self.fittest = None
         self.basename = basename
         self.search_archive = []
-        self.epsilon = 0.005
+        self.epsilon = 0.05
     
 
     def pickle_population(self, save_dir, mode='eval'):
@@ -339,6 +339,9 @@ class CGP(object):
         evaluations = np.zeros(len(pop))
         for i in range(len(pop)):
             evaluations[i] = pop[i].eval
+            if self.fittest != None:
+                if pop[i].eval > self.fittest.eval:
+                    self.fittest = pop[i]
 
         if not init_flag:
             self.num_eval += len(DAG_list)
