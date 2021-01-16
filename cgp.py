@@ -295,7 +295,7 @@ class CGP(object):
         self.fittest = None
         self.basename = basename
         self.search_archive = []
-        self.epsilon = 0.05
+        self.epsilon = 0.005
     
 
     def pickle_population(self, save_dir, mode='eval'):
