@@ -332,6 +332,18 @@ class CGP(object):
         except:
             pass
 
+    def pickle_state_shc(self, save_dir, candidate_number, current_iter, maxIter, consider_neutral, log_dir,
+                         mutation_rate, eval_num, ):
+        if not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+        p_name = os.path.join(save_dir, 'shc_' + str(candidate_number) + '_' + str(current_iter) + '.p')
+
+        try:
+            pickle.dump([self.pop, candidate_number, current_iter, maxIter,
+                         consider_neutral, log_dir, mutation_rate, eval_num], open(p_name, "wb"))
+        except:
+            pass
+
     def load_population(self, p_file, init_gen):
         loaded_pop = pickle.load(open(p_file, "rb"))
         self.pop = loaded_pop
@@ -956,3 +968,99 @@ class CGP(object):
                 elif cooling == 'exp':
                     current_temp = current_temp * math.pow(alpha, 1)
             current_temp = start_temp
+
+    def stochastic_hill_climbing(self, candidate_index=0, mutation_rate=0.01, maxIter=200, log_dir='SHC', load=False,
+                                 load_file='', timestamp='', consider_neutral=False):
+
+        log_dir = log_dir + str(mutation_rate) + '_' + timestamp
+        current_iter = 0
+        eval_num = 0
+
+        if load:
+            loaded_state = pickle.load(open(load_file, "rb"))
+            self.pop = loaded_state[0]
+            self.pop_size = len(self.pop)
+            candidate_index = loaded_state[1]
+            current_iter = loaded_state[2]
+            maxIter = loaded_state[3]
+            consider_neutral = loaded_state[4]
+            log_dir = loaded_state[5]
+            mutation_rate = loaded_state[6]
+            eval_num = loaded_state[7]
+
+        else:
+            # Create directories
+            if not os.path.isdir(os.path.join(os.getcwd(), log_dir)):
+                try:
+                    os.makedirs(os.path.join(os.getcwd(), log_dir))
+                    os.makedirs(os.path.join(os.getcwd(), log_dir + "/models"))
+                except OSError as e:
+                    print(e)
+                    return
+
+        print("log Dir {}".format(log_dir))
+
+        for candidate_number in range(candidate_index, len(self.pop), self.lam):
+            while current_iter < maxIter:
+                print("Current Iteration is {}".format(current_iter))
+                neighbors = []
+                process_time = []
+                attempts = [0, 0, 0, 0]
+                eval_flag = np.empty(self.lam, dtype=bool)  # To keep track active mutation
+                DAGs = dict()
+
+                # Get the dag list of the current population
+                for p in self.pop:
+                    print("Fitness {}".format(p.eval))
+                    DAGs[p] = cgp_2_dag(p.active_net_list())
+
+                # Generate local neighbors for the candidate solution
+                for j in range(min(self.lam, len(self.pop) - candidate_number)):
+                    print("Currently Processing candidate number {}".format(candidate_number + j))
+                    start_time = time.time()
+                    mutant, eval_flag[j], attempts[j] = self.get_local_neighbor(Individual(self.net_info, self.init),
+                                                                                candidate_number, j, mutation_rate,
+                                                                                DAGs, consider_neutral)
+                    mutant.model_name = log_dir + "/models/" + self.basename + '_' + str(candidate_number + j) + '_' + \
+                                        str(current_iter) + '.hdf5'
+                    neighbors.append(mutant)
+                    process_time.append(time.time() - start_time)
+
+                # Evaluate the generated mutants
+                print("Evaluating the neighbors")
+                eval_num += sum(eval_flag)
+                neighbor_fitness = self._evaluation(neighbors, eval_flag)
+                print("Summary of Neighbors generated")
+                print("Fitness : {}".format(neighbor_fitness))
+                print("Model Memory : {}".format([neighbors[x].model_mem for x in range(len(neighbors))]))
+                print("Attempts to generate mutant : {}".format(attempts))
+
+                # Check if neighbor is best so far
+                prob = [1.0, 1.0, 1.0, 1.0]
+                for index in range(self.lam):
+                    if neighbor_fitness[index] != 0:
+
+                        cost_diff = neighbor_fitness[index] - self.pop[candidate_number + index].eval
+
+                        # if the new solution is better, accept it
+                        if cost_diff >= 0:
+                            self.pop[candidate_number + index] = neighbors[index]
+                        # if the new solution is not better, accept it with a probability of e^(-cost/K)
+                        else:
+                            r = random.uniform(0, 1)
+                            ac = math.exp(cost_diff / (maxIter / 10))
+                            prob[index] = ac
+                            print('Cost difference : {}'.format(cost_diff))
+                            print("{} < {}".format(r, ac))
+                            if r < ac:
+                                self.pop[candidate_number + index] = neighbors[index]
+                    else:
+                        eval_num -= 1
+
+                # display and save log
+                print(self._log_state(log_dir, eval_num, index=candidate_number, current_iter=current_iter,
+                                      neighborFitness=neighbor_fitness, timeElapsed=process_time, probability=prob))
+
+                # save the current population
+                self.pickle_state_shc(log_dir + '/sa_files_netlists', candidate_number, maxIter, consider_neutral,
+                                      log_dir, mutation_rate, eval_num, current_iter=current_iter)
