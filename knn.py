@@ -20,9 +20,12 @@ def dag_2_vec(G, input_size = (128,128)):
     for node in G.nodes():
         node_dict = G.nodes[node]
         pf = node_dict['pool_factor']
-        if pf >= 0:
+        if pf > 0:
             x = input_size[0]*(2*pf)
             y = input_size[1]*(2*pf)
+        elif pf == 0:
+            x = input_size[0]
+            y = input_size[1]
         else:
             x = input_size[0]/(2*abs(pf))
             y = input_size[1]/(2*abs(pf))
