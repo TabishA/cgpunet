@@ -20,9 +20,13 @@ def dag_2_vec(G, input_size = (128,128)):
     for node in G.nodes():
         node_dict = G.nodes[node]
         pf = node_dict['pool_factor']
+        num_ch = node_dict['num_channels']
         if pf > 0:
             x = input_size[0]*(2*pf)
             y = input_size[1]*(2*pf)
+        elif pf == 0 and num_ch == 0:
+            x = 1
+            y = int(node_dict['units'])
         elif pf == 0:
             x = input_size[0]
             y = input_size[1]
@@ -34,36 +38,39 @@ def dag_2_vec(G, input_size = (128,128)):
     return vec
 
 
-def cosine_similarity(G1, G2):
-    v1 = dag_2_vec(G1)
-    v2 = dag_2_vec(G2)
+def cosine_similarity(G1, G2, input_size):
+    v1 = dag_2_vec(G1, input_size)
+    v2 = dag_2_vec(G2, input_size)
 
-    max1 = np.max(v1, axis=0)
-    max2 = np.max(v2, axis=0)
+    v1 = v1[1:len(v1)-1]
+    v2 = v2[1:len(v2)-1]
 
-    assert(len(max1) == len(max2))
-
-    for i in range(len(max1)):
-        m = max(max1[i], max2[i])
-        for v in v1:
-            if m!=0: v[i] = v[i]/m
-        for v in v2:
-            if m!=0: v[i] = v[i]/m
+    #in case of unequal length, make sure v1 is the longer of the two
+    if len(v2) > len(v1):
+        temp = v1.copy()
+        v1 = v2
+        v2 = temp
     
+    length_diff = len(v1) - len(v2)
 
-    similarity = np.zeros((len(v1), len(v2)))
+    for _ in range(length_diff):
+        v2.append([0, 0, 0, 0])
 
-    for i in range(similarity.shape[0]):
-        for j in range(similarity.shape[1]):
-            c_sim = np.dot(v1[i], v2[j])/(np.linalg.norm(v1[i])*np.linalg.norm(v2[j]))
-            similarity[i][j] = c_sim
+    assert(len(v1) == len(v2))
+    
+    similarity = np.zeros(len(v1))
+
+    for i in range(len(v1)):
+        if np.linalg.norm(v2[i]) == 0:
+            c_sim = 0
+        else:
+            c_sim = np.dot(v1[i], v2[i])/(np.linalg.norm(v1[i])*np.linalg.norm(v2[i]))
+        
+        similarity[i] = c_sim
 
     
-    a = 0 if len(v2) > len(v1) else 1
+    sum_sim = np.sum(similarity)
 
-    max_sim = np.max(similarity, axis=a)
-    sum_max_sim = np.sum(max_sim) - abs(len(v1) - len(v2))
-
-    norm_sum = sum_max_sim/max(len(v1), len(v2))
+    norm_sum = sum_sim/len(v1)
 
     return norm_sum
