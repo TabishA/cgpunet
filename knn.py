@@ -2,10 +2,10 @@ import numpy as np
 import networkx as nx
 
 # Locate the most similar neighbors
-def get_neighbours(pop, ind, num_neighbors):
+def get_neighbours(pop, ind, num_neighbors, input_size):
 	distances = list()
 	for p in pop:
-		dist = cosine_similarity(ind, p)
+		dist = cosine_similarity(ind, p, input_size)
 		distances.append((p, dist))
 	distances.sort(key=lambda tup: tup[1], reverse=True)
 	neighbors = list()
