@@ -20,10 +20,10 @@ import multiprocessing
 def get_model_memory_usage(net_list, batch_size, input_shape, target_shape, return_dict):
     try:
         model = dag_2_cnn(cgp_2_dag(net_list), 0, input_shape, target_shape, compile=False)
-    except tf.errors.ResourceExhaustedError as e:
+    except (tf.errors.ResourceExhaustedError, KeyError) as e:
         print(e)
         return_dict["memory"] = 1000
-        return
+        return 1000
 
     shapes_mem_count = 0
     internal_model_mem_count = 0
