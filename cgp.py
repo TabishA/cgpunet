@@ -20,12 +20,10 @@ import multiprocessing
 def get_model_memory_usage(net_list, batch_size, input_shape, target_shape, return_dict):
     try:
         model = dag_2_cnn(cgp_2_dag(net_list), 0, input_shape, target_shape, compile=False)
-    except KeyError as e:
+    except tf.errors.ResourceExhaustedError as e:
         print(e)
-        return 1000
-    except:
-        print(e)
-        raise
+        return_dict["memory"] = 1000
+        return
 
     shapes_mem_count = 0
     internal_model_mem_count = 0
@@ -570,7 +568,7 @@ class CGP(object):
         
         if next_generation is None:
             for individual in DAGs.keys():
-                neighbours = get_neighbours(list(DAGs.values()), DAGs[individual], k)
+                neighbours = get_neighbours(list(DAGs.values()), DAGs[individual], k, input_size=(self.imgSize, self.imgSize))
                 knn_val = 0
                 for n in neighbours: knn_val += n[1]
                 individual.novelty = 100 - 100*(knn_val/k)
@@ -582,8 +580,8 @@ class CGP(object):
                     DAGs_archive.append(cgp_2_dag(a.active_net_list()))
             for individual in next_generation:
                 G = cgp_2_dag(individual.active_net_list())
-                neighbours_current = get_neighbours(list(DAGs.values()), G, k)
-                neighbours_archive = get_neighbours(DAGs_archive, G, k_a)
+                neighbours_current = get_neighbours(list(DAGs.values()), G, k, input_size=(self.imgSize, self.imgSize))
+                neighbours_archive = get_neighbours(DAGs_archive, G, k_a, input_size=(self.imgSize, self.imgSize))
 
                 knn_val = 0
 
