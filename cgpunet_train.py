@@ -95,7 +95,9 @@ class CNN_train():
         val_precision = history.history['val_precision']
         val_recall = history.history['val_recall']
 
-        val_f1 = 2*((val_precision[0]*val_recall[0])/(val_precision[0]+val_recall[0]+K.epsilon()))
+        last_epoch = len(val_precision) - 1
+        val_f1 = 2*((val_precision[last_epoch]*val_recall[last_epoch])/(val_precision[last_epoch]+val_recall[last_epoch]+K.epsilon()))
+        
         trainable_count = int(np.sum([K.count_params(p) for p in model.trainable_weights]))
 
         if not os.path.isdir('./figures'):
