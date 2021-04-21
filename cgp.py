@@ -23,7 +23,7 @@ def get_model_memory_usage(net_list, batch_size, input_shape, target_shape, retu
     except (tf.errors.ResourceExhaustedError, KeyError) as e:
         print(e)
         return_dict["memory"] = 1000
-        return 1000
+        return
 
     shapes_mem_count = 0
     internal_model_mem_count = 0
