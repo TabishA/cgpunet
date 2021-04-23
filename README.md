@@ -11,7 +11,7 @@ Some key differences in this implementation compared to the original:
 
 <ol>
 <li>This is a Keras implementation, translated from the original PyTorch implementation.</li>
-<li>The CNNs are evolved for the task of image segmentation, rather than classification as in the original work.</li>
+<li>The CNNs are evolved for the task of image segmentation, rather than recognition as in the original work.</li>
 <li>We have expanded the function set to incorporate a larger selection of functions, including transpose convolutions.</li>
 <li>We include the implementation of a networkx DAG phenotype which allows for the use graph traversal algorithms. This is intended to allow for extension of the current work for the realisation of semantic-aware GP crossover operators.</li>
 <li>We implement measures of structural diversity for the characterisation of local optima, which can subsequently be exploited using stochastic local search algorithms. We assert that this will result in a more efficient neural architecture search.</li>
