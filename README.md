@@ -1,7 +1,9 @@
 # cgpunet
 ### Neuroevolution of CNN architectures for medical image segmentation
 
-This repository is currently under construction and is built on top of a clone of the implementation by Suganuma: 
+This repository is currently under construction - basic functionality is provided and has yielded success, but characterization of local optima is still experimental. We are currently developing a dimensionality reduction technique for this purpose that is not available on the master branch. The current version uses cosine similarity between vector representations of CNNs as an approximate measure of similarity between architectures.
+
+The genotypic representation is adapted from the implementation by Suganuma: 
 https://github.com/sg-nm/cgp-cnn-PyTorch
 
 You may wish to refer to the original paper for the genotypic representation:
