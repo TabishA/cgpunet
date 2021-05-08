@@ -22,8 +22,8 @@ def dag_2_vec(G, input_size = (128,128)):
         pf = node_dict['pool_factor']
         num_ch = node_dict['num_channels']
         if pf > 0:
-            x = input_size[0]*(2*pf)
-            y = input_size[1]*(2*pf)
+            x = input_size[0]/(2*pf)
+            y = input_size[1]/(2*pf)
         elif pf == 0 and num_ch == 0:
             x = 1
             y = int(node_dict['units'])
@@ -31,8 +31,8 @@ def dag_2_vec(G, input_size = (128,128)):
             x = input_size[0]
             y = input_size[1]
         else:
-            x = input_size[0]/(2*abs(pf))
-            y = input_size[1]/(2*abs(pf))
+            x = input_size[0]*(2*abs(pf))
+            y = input_size[1]*(2*abs(pf))
         vec.append([int(node_dict['num_channels']), x, y, depth[node]])
 
     return vec
