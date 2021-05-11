@@ -79,7 +79,6 @@ def traverse(dag, successor, modules):
     return modules
 
 
-#TODO: test if tf.device('/gpu:{}') actually works
 def dag_2_cnn(dag, gpuID, input_shape=(256,256,1), target_shape=(256,256,1), pretrained_weights = None, compile=True):
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpuID)
     nodes = list(dag.nodes())
