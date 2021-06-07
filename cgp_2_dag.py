@@ -151,7 +151,7 @@ def update_edges(G):
 
     return G
 
-#TODO: add case for DeconvBlock
+
 def combine(G, Gr):
     mapping = dict()
     final_index = 2*len(Gr) - 1
@@ -219,7 +219,7 @@ def increment_duplicate_index(elem, i):
         return out
 
 
-#TODO: input shape as args
+
 def cgp_2_dag(net_list, mirror=False):
     print('Individual: {}'.format(net_list))
 
@@ -324,6 +324,13 @@ def cgp_2_dag(net_list, mirror=False):
     #bool mirror controls how the terminal layers are generated
     G = append_output_layers(G, mirror=mirror)
     
+    func_dict = dict()
+
+    for n in G.nodes():
+        func_dict[n] = get_function(n)['function']
+    
+    nx.set_node_attributes(G, func_dict, 'function')
+
     return G
 
 
