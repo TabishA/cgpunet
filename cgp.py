@@ -11,7 +11,8 @@ from cgp_2_dag import *
 from dag_2_cnn import *
 import matplotlib.pyplot as plt
 import pickle
-from knn import *
+from knn import calculate_distance, check_local_neighbor
+from ged import get_distances, get_neighbours
 from tensorflow.compat.v1.keras import backend as K
 import multiprocessing
 
@@ -301,6 +302,7 @@ class CGP(object):
         self.max_eval = max_eval
         self.init = init
         self.fittest = None
+        self.novel = None
         self.basename = basename
         self.search_archive = []
         self.epsilon = 0.05
@@ -470,9 +472,11 @@ class CGP(object):
 
     def get_fittest(self, individuals, mode='eval'):
         max_fitness = 0
+        max_novelty = 0
         fittest = None
+        novel = None
         for ind in individuals:
-            if mode == 'eval':
+            if mode=='eval':
                 if ind.eval - max_fitness >= self.epsilon:
                     max_fitness = ind.eval
                     fittest = ind
@@ -480,25 +484,25 @@ class CGP(object):
                     if fittest == None:
                         max_fitness = ind.eval
                         fittest = ind
-                    elif ind.trainable_params < fittest.trainable_params:
+                    elif ind.trainable_params < fittest.trainable_params or ind.novelty > fittest.novelty:
                         max_fitness = ind.eval
                         fittest = ind
-
+                
                 if self.fittest == None:
                     self.fittest = fittest
                 elif fittest != None:
                     if fittest.eval > self.fittest.eval:
                         self.fittest = fittest
-            elif mode == 'novelty':
-                if ind.novelty > max_fitness:
-                    max_fitness = ind.novelty
-                    fittest = ind
-                if self.fittest == None:
-                    self.fittest = fittest
-                elif fittest.novelty > self.fittest.novelty:
-                    self.fittest = fittest
-                    if fittest not in self.search_archive: self.search_archive.append(fittest)
-
+                
+                if ind.novelty > max_novelty:
+                    max_novelty = ind.novelty
+                    novel = ind
+                if self.novel == None:
+                    self.novel = novel
+                elif novel.novelty > self.novel.novelty:
+                    self.novel = novel
+                    if novel not in self.search_archive: self.search_archive.append(novel)
+        
         return fittest
 
     def get_invalid_individuals(self):
@@ -636,37 +640,62 @@ class CGP(object):
         plt.savefig('cgpunet_drive_{}.png'.format(mode))
         plt.close()
 
-    def evaluate_novelty(self, next_generation=None):
-        k = int(math.sqrt(len(self.pop))) + 1
-        DAGs = dict()
-
-        for p in self.pop:
-            DAGs[p] = cgp_2_dag(p.active_net_list())
-
+    def evaluate_novelty(self, next_generation = None):
+        k = int(math.sqrt(len(self.search_archive) + len(self.pop)))
+        if k % 2 == 0:
+            k += 1
+        
         if next_generation is None:
-            for individual in DAGs.keys():
-                neighbours = get_neighbours(list(DAGs.values()), DAGs[individual], k,
-                                            input_size=(self.imgSize, self.imgSize))
-                knn_val = 0
-                for n in neighbours: knn_val += n[1]
-                individual.novelty = 100 - 100 * (knn_val / k)
-        else:
-            k_a = min(len(self.search_archive), k)
-            DAGs_archive = []
-            if k_a > 0:
-                for a in self.search_archive:
-                    DAGs_archive.append(cgp_2_dag(a.active_net_list()))
-            for individual in next_generation:
-                G = cgp_2_dag(individual.active_net_list())
-                neighbours_current = get_neighbours(list(DAGs.values()), G, k, input_size=(self.imgSize, self.imgSize))
-                neighbours_archive = get_neighbours(DAGs_archive, G, k_a, input_size=(self.imgSize, self.imgSize))
+            next_generation = self.pop
+            
+        distances_dict = dict()
+            
+        for j, individual in enumerate(next_generation):
+            all_DAGs = self.pop.copy()
+                
+            if individual.model_name in distances_dict.keys():
+                for ind in self.pop:
+                    if ind.model_name in distances_dict[individual.model_name].keys():
+                        #print('removing individual from comparison list')
+                        all_DAGs.remove(ind)
+                
+            distances = get_distances(all_DAGs + self.search_archive, individual)
 
-                knn_val = 0
+            for d in distances:
+                entry = {individual.model_name: distances[d]}
+                if d in distances_dict.keys():
+                    distances_dict[d].update(entry)
+                else:
+                    distances_dict[d] = entry
 
-                for n in neighbours_current: knn_val += n[1]
-                for n in neighbours_archive: knn_val += n[1]
+            if individual.model_name in distances_dict.keys():
+                distances_dict[individual.model_name].update(distances)
+                #print('updating entry for current individual: {}'.format(distances_dict[individual.model_name]))
+            else:
+                distances_dict[individual.model_name] = distances
+                #print('new entry for current individual: {}'.format(distances))
+            
+            #print('length of distances_dict.keys() = {}'.format(len(distances_dict.keys())))
+            #print(distances_dict)
 
-                individual.novelty = 100 - 100 * (knn_val / (k + k_a))
+            
+        for individual in next_generation:
+            if not individual.model_name in list(distances_dict.keys()): continue
+            distances = distances_dict[individual.model_name]
+            distances = {k: v for k, v in sorted(distances.items(), key=lambda item: item[1])}
+            knn_val = 0
+
+            for i, d in enumerate(distances):
+                if i == 0: continue
+
+                knn_val += distances[d]
+                if i == k + 1: break
+                
+            individual.novelty = knn_val/k
+            print('k = {}'.format(i))
+            print('novelty = {}'.format(individual.novelty))
+        
+        pickle.dump(self.search_archive, open('search_archive.p', 'wb'))
 
     def check_memory(self, individual):
         manager = multiprocessing.Manager()
@@ -689,7 +718,6 @@ class CGP(object):
     #     - Generate lambda individuals in which at least one active node changes (i.e., forced mutation)
     #     - Mutate the best individual with neutral mutation (unchanging the active nodes)
     #         if the best individual is not updated.
-    # TODO: change lam to pop_size
     def modified_evolution(self, mutation_rate=0.01, log_file='./log.txt', arch_file='./arch.txt', load_population='',
                            init_gen=0, mode='eval'):
 
@@ -732,6 +760,7 @@ class CGP(object):
 
                 if mode == 'eval':
                     self._evaluation(self.pop, [True] * len(self.pop), init_flag=True)
+                    self.evaluate_novelty()
                 else:
                     self.evaluate_novelty()
             else:
@@ -778,6 +807,7 @@ class CGP(object):
 
                 if mode == 'eval':
                     self._evaluation(children, eval_flag)
+                    self.evaluate_novelty(next_generation=children)
                     self.survivor_selection(parents, children, tour_size)
                 else:
                     self.evaluate_novelty(next_generation=children)
