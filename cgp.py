@@ -12,9 +12,11 @@ from dag_2_cnn import *
 import matplotlib.pyplot as plt
 import pickle
 from knn import calculate_distance, check_local_neighbor
-from ged import get_distances, get_neighbours
+from ged import get_distances_simgnn
 from tensorflow.compat.v1.keras import backend as K
 import multiprocessing
+from sim_gnn.src.simgnn import SimGNNTrainer
+from sim_gnn.src.param_parser import parameter_parser
 
 
 # https://stackoverflow.com/questions/43137288/how-to-determine-needed-memory-of-keras-model
@@ -59,7 +61,7 @@ def get_model_memory_usage(net_list, batch_size, input_shape, target_shape, retu
 
 # gene[f][c] f:function type, c:connection (nodeID)
 class Individual(object):
-
+    #Ind 2_json function here returning the graph edge list and its labels
     def __init__(self, net_info, init):
         self.net_info = net_info
         self.gene = np.zeros((self.net_info.node_num + self.net_info.out_num, self.net_info.max_in_num + 1)).astype(int)
@@ -72,6 +74,8 @@ class Individual(object):
         self.model_name = ''
         self.novelty = 0
         self.model_mem = 0
+        self.labels = {'input': '0', 'ConvBlock': '1', 'ResBlock': '2', 'DeconvBlock': '3', 'Concat': '4', 'Sum': '5', \
+                  'Avg_Pool': '6', 'Max_Pool': '7'}
         if init:
             print('init with specific architectures')
             self.init_gene_with_conv()  # In the case of starting only convolution
@@ -285,6 +289,38 @@ class Individual(object):
         return net_list
 
 
+    def ind_2_dict(self):
+        ind_edgelist = []
+        ind_labels = []
+
+        netlist = self.active_net_list()
+        G = cgp_2_dag(netlist)
+        nodelist = list(G.nodes)
+
+        for node in nodelist:
+            elems = node.split('_')
+            fn = G.nodes[node]['function']
+            id = int(G.nodes[node]['id'])
+            if fn == 'input':
+                ind_labels.append(self.labels[fn])
+                continue
+            elif fn in ['Sum', 'Concat']:
+                n1 = int(elems[1])
+                n2 = int(elems[2])
+                edge1 = [n1, id]
+                edge2 = [n2, id]
+                ind_edgelist.append(edge1)
+                ind_labels.append(self.labels[fn])
+                ind_edgelist.append(edge2)
+                ind_labels.append(self.labels[fn])
+            else:
+                n1 = int(elems[len(elems) - 2])
+                ind_edgelist.append([n1, id])
+                ind_labels.append(self.labels[fn])
+
+        return {'graph': ind_edgelist, 'labels': ind_labels, 'modelname': self.model_name}
+
+
 # CGP with (1 + \lambda)-ES
 class CGP(object):
     def __init__(self, net_info, eval_func, max_eval, pop_size=100, lam=4, gpu_mem=16, imgSize=256, init=False,
@@ -306,6 +342,11 @@ class CGP(object):
         self.basename = basename
         self.search_archive = []
         self.epsilon = 0.05
+        self.simgnn_init()
+
+
+    def simgnn_init(self):
+        self.args = parameter_parser()
 
     def pickle_population(self, save_dir, mode='eval'):
         if not os.path.isdir(save_dir):
@@ -641,6 +682,10 @@ class CGP(object):
         plt.close()
 
     def evaluate_novelty(self, next_generation = None):
+        trainer = SimGNNTrainer(self.args)
+        if self.args.load_path:
+            trainer.load()
+
         k = int(math.sqrt(len(self.search_archive) + len(self.pop)))
         if k % 2 == 0:
             k += 1
@@ -649,7 +694,7 @@ class CGP(object):
             next_generation = self.pop
             
         distances_dict = dict()
-            
+
         for j, individual in enumerate(next_generation):
             all_DAGs = self.pop.copy()
                 
@@ -659,26 +704,42 @@ class CGP(object):
                         #print('removing individual from comparison list')
                         all_DAGs.remove(ind)
                 
-            distances = get_distances(all_DAGs + self.search_archive, individual)
+            #distances = get_distances(all_DAGs + self.search_archive, individual)
+            pop_dict = list()
+            individual_dict = individual.ind_2_dict() #G1
 
-            for d in distances:
-                entry = {individual.model_name: distances[d]}
-                if d in distances_dict.keys():
-                    distances_dict[d].update(entry)
+            for ind in (all_DAGs + self.search_archive):
+                pop_dict.append(ind.ind_2_dict())
+
+            for graph2 in pop_dict:
+                data = dict()
+                data['graph_1'] = individual_dict['graph']
+                data['labels_1'] = individual_dict['labels']
+                data['modelname1'] = individual_dict['modelname']
+                data['graph_2'] = graph2['graph']
+                data['labels_2'] = graph2['labels']
+                data['modelname2'] = graph2['modelname']
+
+                distances = get_distances_simgnn(trainer, data)
+
+                for d in distances:
+                    entry = {individual.model_name: distances[d]}
+                    if d in distances_dict.keys():
+                        distances_dict[d].update(entry)
+                    else:
+                        distances_dict[d] = entry
+
+                if individual.model_name in distances_dict.keys():
+                    distances_dict[individual.model_name].update(distances)
+                    #print('updating entry for current individual: {}'.format(distances_dict[individual.model_name]))
                 else:
-                    distances_dict[d] = entry
-
-            if individual.model_name in distances_dict.keys():
-                distances_dict[individual.model_name].update(distances)
-                #print('updating entry for current individual: {}'.format(distances_dict[individual.model_name]))
-            else:
-                distances_dict[individual.model_name] = distances
+                    distances_dict[individual.model_name] = distances
                 #print('new entry for current individual: {}'.format(distances))
             
             #print('length of distances_dict.keys() = {}'.format(len(distances_dict.keys())))
             #print(distances_dict)
 
-            
+        trainer.delete_model()
         for individual in next_generation:
             if not individual.model_name in list(distances_dict.keys()): continue
             distances = distances_dict[individual.model_name]
