@@ -130,6 +130,7 @@ class SimGNNTrainer(object):
         Creating a SimGNN.
         """
         self.model = SimGNN(self.args, self.number_of_labels)
+        self.model.to('cuda')
 
     def initial_label_enumeration(self):
         """
@@ -285,3 +286,7 @@ class SimGNNTrainer(object):
 
     def load(self):
         self.model.load_state_dict(torch.load(self.args.load_path))
+
+    def delete_model(self):
+        del self.model
+        torch.cuda.empty_cache()

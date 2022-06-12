@@ -1,6 +1,14 @@
 """Getting params from the command line."""
 
 import argparse
+import os
+
+def dir_path(path):
+    if os.path.isdir(path):
+        return path
+    else:
+        raise NotADirectoryError(path)
+
 
 def parameter_parser():
     """
@@ -89,5 +97,9 @@ def parameter_parser():
                         type=str,
                         default='../cgpunet_models/apr25_2022.pth',
                         help="Load a pretrained model")
+
+    parser.add_argument('-cgp_data_path',
+                        type=dir_path,
+                        help="Data path for CGPU-Net")
 
     return parser.parse_args()
