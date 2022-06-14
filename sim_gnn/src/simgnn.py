@@ -6,8 +6,8 @@ import random
 import numpy as np
 from tqdm import tqdm, trange
 from torch_geometric.nn import GCNConv
-from layers import AttentionModule, TenorNetworkModule
-from utils import process_pair, calculate_loss, calculate_normalized_ged
+from sim_gnn.src.layers import AttentionModule, TenorNetworkModule
+from sim_gnn.src.utils import process_pair, calculate_loss, calculate_normalized_ged
 
 class SimGNN(torch.nn.Module):
     """
@@ -285,7 +285,15 @@ class SimGNNTrainer(object):
         torch.save(self.model.state_dict(), self.args.save_path)
 
     def load(self):
-        self.model.load_state_dict(torch.load(self.args.load_path))
+        missing_keys = ["convolution_1.lin.weight", "convolution_2.lin.weight", "convolution_3.lin.weight"]
+        load_dict = torch.load(self.args.load_path)
+        for m in missing_keys:
+            k = m.replace('.lin.', '.')
+            load_dict[m] = load_dict[k]
+            del load_dict[k]
+        
+        self.model.load_state_dict(load_dict)
+        #self.model.load_state_dict(torch.load(self.args.load_path))
 
     def delete_model(self):
         del self.model

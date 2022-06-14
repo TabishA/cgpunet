@@ -95,7 +95,7 @@ def parameter_parser():
 
     parser.add_argument("--load-path",
                         type=str,
-                        default='../cgpunet_models/apr25_2022.pth',
+                        default='./cgpunet_models/apr25_2022.pth',
                         help="Load a pretrained model")
 
     parser.add_argument('-cgp_data_path',
