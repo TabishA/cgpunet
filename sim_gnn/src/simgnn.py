@@ -285,12 +285,13 @@ class SimGNNTrainer(object):
         torch.save(self.model.state_dict(), self.args.save_path)
 
     def load(self):
-        missing_keys = ["convolution_1.lin.weight", "convolution_2.lin.weight", "convolution_3.lin.weight"]
+        #missing_keys = ["convolution_1.lin.weight", "convolution_2.lin.weight", "convolution_3.lin.weight"]
         load_dict = torch.load(self.args.load_path)
-        for m in missing_keys:
-            k = m.replace('.lin.', '.')
-            load_dict[m] = load_dict[k]
-            del load_dict[k]
+        #for m in missing_keys:
+            #k = m.replace('.lin.', '.')
+            #load_dict[m] = load_dict[k].transpose(0,1)
+            #load_dict[k] = load_dict[m]
+            #del load_dict[m]
         
         self.model.load_state_dict(load_dict)
         #self.model.load_state_dict(torch.load(self.args.load_path))

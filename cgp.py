@@ -749,8 +749,7 @@ class CGP(object):
         return_dict = manager.dict()
 
         arguments = (
-        individual.active_net_list(), self.eval_func.batchsize, self.eval_func.input_shape, self.eval_func.target_shape,
-        return_dict)
+        individual.active_net_list(), self.eval_func.batchsize, self.eval_func.input_shape, return_dict)
         p = multiprocessing.Process(target=get_approximate_model_memory, args=arguments)
         p.start()
         p.join()

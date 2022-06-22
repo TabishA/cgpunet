@@ -19,12 +19,12 @@ def parameter_parser():
 
     parser.add_argument("--training-graphs",
                         nargs="?",
-                        default="../dataset/train/",
+                        default="./sim_gnn/dataset/train/",
 	                help="Folder with training graph pair jsons.")
 
     parser.add_argument("--testing-graphs",
                         nargs="?",
-                        default="../dataset/test/",
+                        default="./sim_gnn/dataset/test/",
 	                help="Folder with testing graph pair jsons.")
 
     parser.add_argument("--epochs",
@@ -100,6 +100,7 @@ def parameter_parser():
 
     parser.add_argument('-cgp_data_path',
                         type=dir_path,
+                        default=None,
                         help="Data path for CGPU-Net")
 
     return parser.parse_args()
