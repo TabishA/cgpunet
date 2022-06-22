@@ -697,6 +697,8 @@ class CGP(object):
             for ind in (all_DAGs + self.search_archive):
                 pop_dict.append(ind.ind_2_dict())
 
+            pairs_list = []
+
             for graph2 in pop_dict:
                 data = dict()
                 data['graph_1'] = individual_dict['graph']
@@ -705,21 +707,22 @@ class CGP(object):
                 data['graph_2'] = graph2['graph']
                 data['labels_2'] = graph2['labels']
                 data['modelname2'] = graph2['modelname']
+                pairs_list.append(data)
 
-                distances = get_distances_simgnn(trainer, data)
+            distances = get_distances_simgnn(trainer, pairs_list)
 
-                for d in distances:
-                    entry = {individual.model_name: distances[d]}
-                    if d in distances_dict.keys():
-                        distances_dict[d].update(entry)
-                    else:
-                        distances_dict[d] = entry
-
-                if individual.model_name in distances_dict.keys():
-                    distances_dict[individual.model_name].update(distances)
-                    #print('updating entry for current individual: {}'.format(distances_dict[individual.model_name]))
+            for d in distances:
+                entry = {individual.model_name: distances[d]}
+                if d in distances_dict.keys():
+                    distances_dict[d].update(entry)
                 else:
-                    distances_dict[individual.model_name] = distances
+                    distances_dict[d] = entry
+
+            if individual.model_name in distances_dict.keys():
+                distances_dict[individual.model_name].update(distances)
+                #print('updating entry for current individual: {}'.format(distances_dict[individual.model_name]))
+            else:
+                distances_dict[individual.model_name] = distances
                 #print('new entry for current individual: {}'.format(distances))
             
             #print('length of distances_dict.keys() = {}'.format(len(distances_dict.keys())))
