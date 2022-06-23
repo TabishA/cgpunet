@@ -86,8 +86,10 @@ def get_distances_simgnn(simgnn_model, data):
 
     return : {individual.modelname: ged}
     """
+    print('get distances Sim GNN')
     result = dict()
     for pair in data:
+        print('pair: {}'.format(pair))
         result[pair['modelname2']] = simgnn_model.predict(pair)
 
 # New get distance function to be coded here using the trained model

@@ -16,20 +16,25 @@ def check_func(func_gene, func):
 #NOTE: "successors" should be renamed to predecessors
 def get_function(node):
     func_dict = dict()
-    
+
     elems = node.split('_')
-    
+
     if elems[0] == 'S' or elems[0] == 'D':
-        func_dict['function'] = elems[1]
+        func_dict['function'] = re.match('[a-zA-Z]+', elems[1]).group()
         func_dict['filters'] = int(elems[2])
         func_dict['kernel_size'] = (int(elems[3]), int(elems[3]))
         func_dict['successors'] = (int(elems[4]), int(elems[5]))
     elif elems[0] == 'Max' or elems[0] == 'Avg':
-        func_dict['function'] = elems[0] + '_' + elems[1]
+        func_dict['function'] = re.match('[a-zA-Z]+', elems[0]).group() + '_' + re.match('[a-zA-Z]+', elems[1]).group()
         func_dict['successors'] = (int(elems[2]), int(elems[3]))
     elif (re.search("^Sum.*", elems[0]) or re.search("^Concat.*", elems[0]) or re.search("^input.*", elems[0])):
-        func_dict['function'] = elems[0]
+        func_dict['function'] = re.match('[a-zA-Z]+', elems[0]).group()
         func_dict['successors'] = (int(elems[1]), int(elems[2]))
+    elif re.search("^FC.*", elems[0]):
+        func_dict['function'] = re.match('[a-zA-Z]+', elems[0]).group()
+        func_dict['units'] = int(elems[1])
+        func_dict['successors'] = (int(elems[2]), int(elems[2]))
+
     return func_dict
 
 
