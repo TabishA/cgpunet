@@ -499,11 +499,9 @@ class CGP(object):
 
     def get_fittest(self, individuals, mode='eval'):
         max_fitness = 0
-        max_novelty = 0
         fittest = None
-        novel = None
         for ind in individuals:
-            if mode=='eval':
+            if mode == 'eval':
                 if ind.eval - max_fitness >= self.epsilon:
                     max_fitness = ind.eval
                     fittest = ind
@@ -514,22 +512,22 @@ class CGP(object):
                     elif ind.trainable_params < fittest.trainable_params or ind.novelty > fittest.novelty:
                         max_fitness = ind.eval
                         fittest = ind
-                
+
                 if self.fittest == None:
                     self.fittest = fittest
                 elif fittest != None:
                     if fittest.eval > self.fittest.eval:
                         self.fittest = fittest
-                
-                if ind.novelty > max_novelty:
-                    max_novelty = ind.novelty
-                    novel = ind
-                if self.novel == None:
-                    self.novel = novel
-                elif novel.novelty > self.novel.novelty:
-                    self.novel = novel
-                    if novel not in self.search_archive: self.search_archive.append(novel)
-        
+            elif mode == 'novelty':
+                if ind.novelty > max_fitness:
+                    max_fitness = ind.novelty
+                    fittest = ind
+                if self.fittest == None:
+                    self.fittest = fittest
+                elif fittest.novelty > self.fittest.novelty:
+                    self.fittest = fittest
+                    if fittest not in self.search_archive: self.search_archive.append(fittest)
+
         return fittest
 
     def get_invalid_individuals(self):
