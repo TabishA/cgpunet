@@ -383,10 +383,6 @@ class CGP(object):
             DAG_list.append(G)
             model_names.append(pop[i].model_name)
 
-        # Added during SA runs
-        for i in range(len(DAG_list)):
-            print(model_names[i].split('/')[2])
-
         num_epochs = self.num_epochs_scheduler(self.num_eval, self.max_eval, self.eval_func.epoch_num)
         num_epochs_list = [num_epochs] * len(DAG_list)
 
