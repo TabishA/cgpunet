@@ -92,6 +92,8 @@ def get_distances_simgnn(simgnn_model, data):
         print('pair: {}'.format(pair))
         result[pair['modelname2']] = simgnn_model.predict(pair)
 
+    return result
+
 # New get distance function to be coded here using the trained model
 # Model inputs are individuals in json format
 def entropy(pop):
