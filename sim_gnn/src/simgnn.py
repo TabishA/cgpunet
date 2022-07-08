@@ -130,7 +130,8 @@ class SimGNNTrainer(object):
         Creating a SimGNN.
         """
         self.model = SimGNN(self.args, self.number_of_labels)
-        self.model.to('cuda')
+        #self.model.to('cuda')
+        #self.model.to(torch.device('cuda:0'))
 
     def initial_label_enumeration(self):
         """
