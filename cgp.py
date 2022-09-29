@@ -11,12 +11,12 @@ from cgp_2_dag import *
 from dag_2_cnn import *
 import matplotlib.pyplot as plt
 import pickle
+import random
 from knn import calculate_distance, check_local_neighbor, dag_2_vec
 from ged import get_distances_simgnn
 from tensorflow.compat.v1.keras import backend as K
 import multiprocessing
-from sim_gnn.src.simgnn import SimGNNTrainer
-from sim_gnn.src.param_parser import parameter_parser
+from simgnn.src.parser import parameter_parser
 
 
 def get_approximate_model_memory(net_list, batch_size, input_shape, return_dict):
@@ -328,11 +328,9 @@ class CGP(object):
         self.basename = basename
         self.search_archive = []
         self.epsilon = 0.05
-        self.simgnn_init()
-
-
-    def simgnn_init(self):
         self.args = parameter_parser()
+        self.simgnn_labels = pickle.load(open(self.args.node_labels_path, 'rb'))
+
 
     def pickle_population(self, save_dir, mode='eval'):
         if not os.path.isdir(save_dir):
@@ -495,7 +493,9 @@ class CGP(object):
 
     def get_fittest(self, individuals, mode='eval'):
         max_fitness = 0
+        max_novelty = 0
         fittest = None
+        novel = None
         for ind in individuals:
             if mode == 'eval':
                 if ind.eval - max_fitness >= self.epsilon:
@@ -514,15 +514,15 @@ class CGP(object):
                 elif fittest != None:
                     if fittest.eval > self.fittest.eval:
                         self.fittest = fittest
-            elif mode == 'novelty':
-                if ind.novelty > max_fitness:
-                    max_fitness = ind.novelty
-                    fittest = ind
-                if self.fittest == None:
-                    self.fittest = fittest
-                elif fittest.novelty > self.fittest.novelty:
-                    self.fittest = fittest
-                    if fittest not in self.search_archive: self.search_archive.append(fittest)
+
+                if ind.novelty > max_novelty:
+                    max_novelty = ind.novelty
+                    novel = ind
+                if self.novel == None:
+                    self.novel = novel
+                elif novel.novelty > self.novel.novelty:
+                    self.novel = novel
+                    if novel not in self.search_archive: self.search_archive.append(novel)
 
         return fittest
 
@@ -662,10 +662,6 @@ class CGP(object):
         plt.close()
 
     def evaluate_novelty(self, next_generation = None):
-        trainer = SimGNNTrainer(self.args)
-        if self.args.load_path:
-            trainer.load()
-
         k = int(math.sqrt(len(self.search_archive) + len(self.pop)))
         if k % 2 == 0:
             k += 1
@@ -703,7 +699,17 @@ class CGP(object):
                 data['modelname2'] = graph2['modelname']
                 pairs_list.append(data)
 
-            distances = get_distances_simgnn(trainer, pairs_list)
+            distances = get_distances_simgnn(simgnn_model_path=self.load_path, global_labels=self.simgnn_labels, data=pairs_list)
+
+            manager = multiprocessing.Manager()
+            return_dict = manager.dict()
+
+            arguments = (self.load_path, self.simgnn_labels, pairs_list, return_dict)
+            p = multiprocessing.Process(target=get_distances_simgnn, args=arguments)
+            p.start()
+            p.join()
+
+            distances = return_dict["distances"]
 
             for d in distances:
                 entry = {individual.model_name: distances[d]}
@@ -722,7 +728,6 @@ class CGP(object):
             #print('length of distances_dict.keys() = {}'.format(len(distances_dict.keys())))
             #print(distances_dict)
 
-        trainer.delete_model()
         for individual in next_generation:
             if not individual.model_name in list(distances_dict.keys()): continue
             distances = distances_dict[individual.model_name]
