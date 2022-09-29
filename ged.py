@@ -105,8 +105,7 @@ def get_distances_simgnn(simgnn_model_path, global_labels, data, return_dict):
             y = np.array([data["features_2"]])
             a = np.array([data["edge_index_1"]])
             b = np.array([data["edge_index_2"]])
-
-            model = keras.models.load_model("train")
+            
             pred_log = model.predict([x, a, y, b])
             pred_log = pred_log[0][0]
             pred_norm = -np.log(pred_log) / np.log(np.exp(1))
