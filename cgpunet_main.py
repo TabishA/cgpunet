@@ -6,7 +6,7 @@ from cgp_config import *
 from dataHelperTif import *
 import os
 import sys
-from sim_gnn.src.param_parser import parameter_parser
+from simgnn.src.parser import parameter_parser
 
 
 

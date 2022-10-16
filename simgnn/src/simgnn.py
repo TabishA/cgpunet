@@ -3,7 +3,7 @@ from tensorflow.keras import layers
 from keras_gcn import GraphConv
 from keras.models import Model
 from keras.layers import Input, Conv1D
-from custom_layers import CustomAttention, NeuralTensorLayer
+from simgnn.src.custom_layers import CustomAttention, NeuralTensorLayer
 """ 
 Main model : Node-to-Node interaction not implemented.
 Functional API :

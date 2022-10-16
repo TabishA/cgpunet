@@ -3,10 +3,10 @@ from keras import backend as K
 from keras_gcn import GraphConv
 import numpy as np
 from tqdm import tqdm, trange
-from parser import parameter_parser
-from utilities import data2, convert_to_keras, process, find_loss
-from simgnn import simgnn
-from custom_layers import CustomAttention, NeuralTensorLayer
+from simgnn.src.parser import parameter_parser
+from simgnn.src.utilities import data2, convert_to_keras, process, find_loss
+from simgnn.src.simgnn import simgnn
+from simgnn.src.custom_layers import CustomAttention, NeuralTensorLayer
 from keras.backend import manual_variable_initialization
 import pickle
 manual_variable_initialization(True)

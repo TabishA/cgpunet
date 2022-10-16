@@ -281,6 +281,10 @@ class Individual(object):
 
         netlist = self.active_net_list()
         G = cgp_2_dag(netlist)
+
+        if nx.isolates(G):
+            G.remove_nodes_from(nx.isolates(G))
+
         nodelist = list(G.nodes)
 
         for node in nodelist:
@@ -296,7 +300,6 @@ class Individual(object):
                 edge1 = [n1, id]
                 edge2 = [n2, id]
                 ind_edgelist.append(edge1)
-                ind_labels.append(self.labels[fn])
                 ind_edgelist.append(edge2)
                 ind_labels.append(self.labels[fn])
             else:
@@ -699,12 +702,12 @@ class CGP(object):
                 data['modelname2'] = graph2['modelname']
                 pairs_list.append(data)
 
-            distances = get_distances_simgnn(simgnn_model_path=self.load_path, global_labels=self.simgnn_labels, data=pairs_list)
+            # distances = get_distances_simgnn(simgnn_model_path=self.args.load_path, global_labels=self.simgnn_labels, data=pairs_list)
 
             manager = multiprocessing.Manager()
             return_dict = manager.dict()
 
-            arguments = (self.load_path, self.simgnn_labels, pairs_list, return_dict)
+            arguments = (self.args.load_path, self.simgnn_labels, pairs_list, return_dict)
             p = multiprocessing.Process(target=get_distances_simgnn, args=arguments)
             p.start()
             p.join()

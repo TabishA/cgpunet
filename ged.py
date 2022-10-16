@@ -92,19 +92,32 @@ def get_distances_simgnn(simgnn_model_path, global_labels, data, return_dict):
     return : {individual.modelname: ged}
     """
 
-    with tf.device('\gpu:0'):
+    with tf.device('/gpu:0'):
         model = keras.models.load_model(simgnn_model_path)
         print('get distances Sim GNN')
+
+        print(model.summary())
+
         result = dict()
         for pair in data:
             print('pair: {}'.format(pair))
-            scaling_factor = 0.5 * (len(data["labels_1"]) + len(data["labels_2"]))
-            data = convert_to_keras(data, global_labels)
 
-            x = np.array([data["features_1"]])
-            y = np.array([data["features_2"]])
-            a = np.array([data["edge_index_1"]])
-            b = np.array([data["edge_index_2"]])
+            if pair["labels_1"] == pair["labels_2"] and pair["graph_1"] == pair["graph_2"]:
+                result[pair["modelname2"]] = 0
+                continue
+
+            scaling_factor = 0.5 * (len(pair["labels_1"]) + len(pair["labels_2"]))
+            data_keras = convert_to_keras(pair, global_labels)
+
+            x = np.array([data_keras["features_1"]])
+            y = np.array([data_keras["features_2"]])
+            a = np.array([data_keras["edge_index_1"]])
+            b = np.array([data_keras["edge_index_2"]])
+
+            print("x shape: {}".format(x.shape))
+            print("y shape: {}".format(y.shape))
+            print("a shape: {}".format(a.shape))
+            print("b shape: {}".format(b.shape))
             
             pred_log = model.predict([x, a, y, b])
             pred_log = pred_log[0][0]

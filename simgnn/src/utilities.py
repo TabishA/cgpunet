@@ -4,7 +4,7 @@ from tqdm import tqdm, trange
 import argparse
 import json
 import math
-from parser import parameter_parser
+from simgnn.src.parser import parameter_parser
 import random
 import tensorflow as tf
 
@@ -101,10 +101,10 @@ def convert_to_keras(data, global_labels):
         transformed_data["edge_index_2"] = edges_2
         transformed_data["features_1"] = features_1
         transformed_data["features_2"] = features_2
-        norm_ged = data["ged"]/(0.5*(len(data["labels_1"])+len(data["labels_2"])))
-        #print(norm_ged.shape)
-        transformed_data["target"] = tf.reshape(tf.convert_to_tensor(np.exp(-norm_ged).reshape(1, 1)),-1)
-        #print(transformed_data["target"].shape)
+
+        if "ged" in data.keys():
+            norm_ged = data["ged"]/(0.5*(len(data["labels_1"])+len(data["labels_2"])))
+            transformed_data["target"] = tf.reshape(tf.convert_to_tensor(np.exp(-norm_ged).reshape(1, 1)),-1)
 
         return transformed_data
 
