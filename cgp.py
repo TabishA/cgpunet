@@ -744,7 +744,7 @@ class CGP(object):
                 if i == k + 1: break
                 
             individual.novelty = knn_val/k
-            print('k = {}'.format(i))
+            print('k = {}'.format(i-1))
             print('novelty = {}'.format(individual.novelty))
         
         pickle.dump(self.search_archive, open('search_archive.p', 'wb'))
