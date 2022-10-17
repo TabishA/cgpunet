@@ -5,6 +5,11 @@ import pickle
 from networkx.algorithms import similarity
 import concurrent.futures
 import time
+from simgnn.src.utilities import convert_to_keras
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.compat.v1.keras import backend as K
+import numpy as np
 
 
 def match(n1, n2):
@@ -80,17 +85,49 @@ def get_distances(pop, ind):
     return distances
 
 
-def get_distances_simgnn(simgnn_model, data):
+def get_distances_simgnn(simgnn_model_path, global_labels, data, return_dict):
     """
     data : a list of dictionaries of this form [{g1, g2, l1, l2, m1, m2}]
 
     return : {individual.modelname: ged}
     """
-    print('get distances Sim GNN')
-    result = dict()
-    for pair in data:
-        print('pair: {}'.format(pair))
-        result[pair['modelname2']] = simgnn_model.predict(pair)
+
+    with tf.device('/gpu:0'):
+        model = keras.models.load_model(simgnn_model_path)
+        print('get distances Sim GNN')
+
+        print(model.summary())
+
+        result = dict()
+        for pair in data:
+            print('pair: {}'.format(pair))
+
+            if pair["labels_1"] == pair["labels_2"] and pair["graph_1"] == pair["graph_2"]:
+                result[pair["modelname2"]] = 0
+                continue
+
+            scaling_factor = 0.5 * (len(pair["labels_1"]) + len(pair["labels_2"]))
+            data_keras = convert_to_keras(pair, global_labels)
+
+            x = np.array([data_keras["features_1"]])
+            y = np.array([data_keras["features_2"]])
+            a = np.array([data_keras["edge_index_1"]])
+            b = np.array([data_keras["edge_index_2"]])
+
+            print("x shape: {}".format(x.shape))
+            print("y shape: {}".format(y.shape))
+            print("a shape: {}".format(a.shape))
+            print("b shape: {}".format(b.shape))
+            
+            pred_log = model.predict([x, a, y, b])
+            pred_log = pred_log[0][0]
+            pred_norm = -np.log(pred_log) / np.log(np.exp(1))
+            pred = pred_norm * scaling_factor
+            result[pair['modelname2']] = pred
+
+    K.clear_session()
+    return_dict["distances"] = result
+
 
 # New get distance function to be coded here using the trained model
 # Model inputs are individuals in json format

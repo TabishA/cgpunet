@@ -6,8 +6,8 @@ from cgp_config import *
 from dataHelperTif import *
 import os
 import sys
-from sim_gnn.src.param_parser import parameter_parser
-
+from simgnn.src.parser import parameter_parser
+import tensorflow as tf
 
 
 def dir_path(path):
@@ -18,6 +18,8 @@ def dir_path(path):
 
 
 if __name__ == "__main__":
+    # tf.debugging.set_log_device_placement(True)
+
     #from cgp_config, initialize CGP grid representation
     #level_back = cols
     network_info = CgpInfoConvSet(rows=5, cols=30, level_back=30, min_active_num=1, max_active_num=30)
@@ -34,17 +36,4 @@ if __name__ == "__main__":
     
     #CGP object contains a population of pop_size individuals
     cgp = CGP(network_info, eval_f, max_eval=100, pop_size=20, lam=4, imgSize=128, init=False)
-    
-    #mode='novelty' runs the Novelty Search and saves each generation as ./p_files_netlists/population_novelty_{num_gen}.p
-    cgp.modified_evolution(mutation_rate=0.1, mode='novelty')
-
-    #get the final population which is optimized for novelty
-    novel_populations = get_files('./p_files_netlists/', '*_novelty*.p')
-    novel_populations.sort()
-    init_novel_population = novel_populations[len(novel_populations) - 1]
-
-    #set cgp.pop to the loaded population and reset initial generation number to 0
-    cgp.load_population(init_novel_population, init_gen=0)
-
-    #run the EA
     cgp.modified_evolution(mutation_rate=0.1)

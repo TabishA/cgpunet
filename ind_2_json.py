@@ -13,6 +13,9 @@ def ind_2_dict(ind):
 
     netlist = ind.active_net_list()
     G = cgp_2_dag(netlist)
+    if nx.isolates(G):
+        print("removing isolates")
+        G.remove_nodes_from(nx.isolates(G))
     nodelist = list(G.nodes)
 
     for node in nodelist:
@@ -28,7 +31,6 @@ def ind_2_dict(ind):
             edge1 = [n1, id]
             edge2 = [n2, id]
             ind_edgelist.append(edge1)
-            ind_labels.append(labels[fn])
             ind_edgelist.append(edge2)
             ind_labels.append(labels[fn])
         else:
@@ -39,15 +41,27 @@ def ind_2_dict(ind):
     return {'graph': ind_edgelist, 'labels': ind_labels}
 
 
+def create_ind_dict():
+    netlists = glob.glob('./netlists_eval_novel/' + '*.p')
+    all_individuals = {}
+    for n in netlists:
+        pop = pickle.load(open(n, 'rb'))
+        for ind in pop:
+            all_individuals[ind.model_name] = ind
+
+    pickle.dump(all_individuals, open('ind_dict.p', 'wb'))
+
+
 if __name__ == "__main__":
     df_ged = pd.read_pickle('df_ged_concat.p')
+    create_ind_dict()
     ind_dict = pickle.load(open('ind_dict.p', 'rb'))
 
-    os.makedirs('./dataset')
+    os.makedirs('./dataset2')
 
     for i, row in enumerate(df_ged.iterrows()):
         outname = str(i) + '.json'
-        outname = os.path.join('./dataset', outname)
+        outname = os.path.join('./dataset2', outname)
         ind1 = ind_dict[row[1]['model_1']]
         ind2 = ind_dict[row[1]['model_2']]
         ged = row[1]['ged']
@@ -62,9 +76,9 @@ if __name__ == "__main__":
             json.dump(out, outfile)
 
     
-    all_files = get_files('./dataset/', '*.json')
-    train_path = os.path.join('./dataset', 'train')
-    test_path = os.path.join('./dataset', 'test')
+    all_files = get_files('./dataset2/', '*.json')
+    train_path = os.path.join('./dataset2', 'train')
+    test_path = os.path.join('./dataset2', 'test')
 
     os.makedirs(train_path)
     os.makedirs(test_path)
