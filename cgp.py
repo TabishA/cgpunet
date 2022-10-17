@@ -11,55 +11,43 @@ from cgp_2_dag import *
 from dag_2_cnn import *
 import matplotlib.pyplot as plt
 import pickle
-from knn import calculate_distance, check_local_neighbor
-from ged import get_distances, get_neighbours
+import random
+from knn import calculate_distance, check_local_neighbor, dag_2_vec
+from ged import get_distances_simgnn
 from tensorflow.compat.v1.keras import backend as K
 import multiprocessing
+from simgnn.src.parser import parameter_parser
 
 
-# https://stackoverflow.com/questions/43137288/how-to-determine-needed-memory-of-keras-model
-def get_model_memory_usage(net_list, batch_size, input_shape, target_shape, return_dict):
-    try:
-        model = dag_2_cnn(cgp_2_dag(net_list), 0, input_shape, target_shape, compile=False)
-    except (tf.errors.ResourceExhaustedError, KeyError) as e:
-        print(e)
-        return_dict["memory"] = 1000
-        return
+def get_approximate_model_memory(net_list, batch_size, input_shape, return_dict):
+    G = cgp_2_dag(net_list)
+    vecs = dag_2_vec(G, input_size=(input_shape[0], input_shape[1]))
 
-    shapes_mem_count = 0
-    internal_model_mem_count = 0
+    memsum = 0
+    params = 0
 
-    for l in model.layers:
-        single_layer_mem = 1
-        out_shape = l.output_shape
-        if type(out_shape) is list:
-            out_shape = out_shape[0]
-        for s in out_shape:
-            if s is None:
-                continue
-            single_layer_mem *= s
+    for v in vecs:
+        if v[0] == 0:
+            memsum += v[1] * v[2]
+        else:
+            memsum += v[0] * v[1] * v[2]
 
-        shapes_mem_count += single_layer_mem
+    for i in range(1, len(vecs)):
+        v = vecs[i]
+        v_prev = vecs[i - 1]
+        if v_prev[0] == 0:
+            params += v[2] * v_prev[2]
+        else:
+            params += v_prev[0] * v_prev[1] * v_prev[2] * (v[1] * v[2])
 
-    trainable_count = np.sum([K.count_params(p) for p in model.trainable_weights])
-    non_trainable_count = np.sum([K.count_params(p) for p in model.non_trainable_weights])
-    number_size = 4.0
+    total = batch_size * memsum + params
 
-    if K.floatx() == 'float16':
-        number_size = 2.0
-    if K.floatx() == 'float64':
-        number_size = 8.0
-
-    total_memory = number_size * (batch_size * shapes_mem_count + trainable_count + non_trainable_count)
-    gbytes = np.round(total_memory / (1024.0 ** 3), 3) + internal_model_mem_count
-    K.clear_session()
-
-    return_dict["memory"] = gbytes
+    return_dict["memory"] = np.round(total / (1024 ** 3), 3)
 
 
 # gene[f][c] f:function type, c:connection (nodeID)
 class Individual(object):
-
+    #Ind 2_json function here returning the graph edge list and its labels
     def __init__(self, net_info, init):
         self.net_info = net_info
         self.gene = np.zeros((self.net_info.node_num + self.net_info.out_num, self.net_info.max_in_num + 1)).astype(int)
@@ -72,6 +60,8 @@ class Individual(object):
         self.model_name = ''
         self.novelty = 0
         self.model_mem = 0
+        self.labels = {'input': '0', 'ConvBlock': '1', 'ResBlock': '2', 'DeconvBlock': '3', 'Concat': '4', 'Sum': '5', \
+                  'Avg_Pool': '6', 'Max_Pool': '7'}
         if init:
             print('init with specific architectures')
             self.init_gene_with_conv()  # In the case of starting only convolution
@@ -285,6 +275,41 @@ class Individual(object):
         return net_list
 
 
+    def ind_2_dict(self):
+        ind_edgelist = []
+        ind_labels = []
+
+        netlist = self.active_net_list()
+        G = cgp_2_dag(netlist)
+
+        if nx.isolates(G):
+            G.remove_nodes_from(nx.isolates(G))
+
+        nodelist = list(G.nodes)
+
+        for node in nodelist:
+            elems = node.split('_')
+            fn = G.nodes[node]['function']
+            id = int(G.nodes[node]['id'])
+            if fn == 'input':
+                ind_labels.append(self.labels[fn])
+                continue
+            elif fn in ['Sum', 'Concat']:
+                n1 = int(elems[1])
+                n2 = int(elems[2])
+                edge1 = [n1, id]
+                edge2 = [n2, id]
+                ind_edgelist.append(edge1)
+                ind_edgelist.append(edge2)
+                ind_labels.append(self.labels[fn])
+            else:
+                n1 = int(elems[len(elems) - 2])
+                ind_edgelist.append([n1, id])
+                ind_labels.append(self.labels[fn])
+
+        return {'graph': ind_edgelist, 'labels': ind_labels, 'modelname': self.model_name}
+
+
 # CGP with (1 + \lambda)-ES
 class CGP(object):
     def __init__(self, net_info, eval_func, max_eval, pop_size=100, lam=4, gpu_mem=16, imgSize=256, init=False,
@@ -306,6 +331,9 @@ class CGP(object):
         self.basename = basename
         self.search_archive = []
         self.epsilon = 0.05
+        self.args = parameter_parser()
+        self.simgnn_labels = pickle.load(open(self.args.node_labels_path, 'rb'))
+
 
     def pickle_population(self, save_dir, mode='eval'):
         if not os.path.isdir(save_dir):
@@ -355,10 +383,6 @@ class CGP(object):
             G = cgp_2_dag(pop[i].active_net_list())
             DAG_list.append(G)
             model_names.append(pop[i].model_name)
-
-        # Added during SA runs
-        for i in range(len(DAG_list)):
-            print(model_names[i].split('/')[2])
 
         num_epochs = self.num_epochs_scheduler(self.num_eval, self.max_eval, self.eval_func.epoch_num)
         num_epochs_list = [num_epochs] * len(DAG_list)
@@ -476,7 +500,7 @@ class CGP(object):
         fittest = None
         novel = None
         for ind in individuals:
-            if mode=='eval':
+            if mode == 'eval':
                 if ind.eval - max_fitness >= self.epsilon:
                     max_fitness = ind.eval
                     fittest = ind
@@ -487,13 +511,13 @@ class CGP(object):
                     elif ind.trainable_params < fittest.trainable_params or ind.novelty > fittest.novelty:
                         max_fitness = ind.eval
                         fittest = ind
-                
+
                 if self.fittest == None:
                     self.fittest = fittest
                 elif fittest != None:
                     if fittest.eval > self.fittest.eval:
                         self.fittest = fittest
-                
+
                 if ind.novelty > max_novelty:
                     max_novelty = ind.novelty
                     novel = ind
@@ -502,7 +526,7 @@ class CGP(object):
                 elif novel.novelty > self.novel.novelty:
                     self.novel = novel
                     if novel not in self.search_archive: self.search_archive.append(novel)
-        
+
         return fittest
 
     def get_invalid_individuals(self):
@@ -649,7 +673,7 @@ class CGP(object):
             next_generation = self.pop
             
         distances_dict = dict()
-            
+
         for j, individual in enumerate(next_generation):
             all_DAGs = self.pop.copy()
                 
@@ -659,7 +683,36 @@ class CGP(object):
                         #print('removing individual from comparison list')
                         all_DAGs.remove(ind)
                 
-            distances = get_distances(all_DAGs + self.search_archive, individual)
+            #distances = get_distances(all_DAGs + self.search_archive, individual)
+            pop_dict = list()
+            individual_dict = individual.ind_2_dict() #G1
+
+            for ind in (all_DAGs + self.search_archive):
+                pop_dict.append(ind.ind_2_dict())
+
+            pairs_list = []
+
+            for graph2 in pop_dict:
+                data = dict()
+                data['graph_1'] = individual_dict['graph']
+                data['labels_1'] = individual_dict['labels']
+                data['modelname1'] = individual_dict['modelname']
+                data['graph_2'] = graph2['graph']
+                data['labels_2'] = graph2['labels']
+                data['modelname2'] = graph2['modelname']
+                pairs_list.append(data)
+
+            # distances = get_distances_simgnn(simgnn_model_path=self.args.load_path, global_labels=self.simgnn_labels, data=pairs_list)
+
+            manager = multiprocessing.Manager()
+            return_dict = manager.dict()
+
+            arguments = (self.args.load_path, self.simgnn_labels, pairs_list, return_dict)
+            p = multiprocessing.Process(target=get_distances_simgnn, args=arguments)
+            p.start()
+            p.join()
+
+            distances = return_dict["distances"]
 
             for d in distances:
                 entry = {individual.model_name: distances[d]}
@@ -678,7 +731,6 @@ class CGP(object):
             #print('length of distances_dict.keys() = {}'.format(len(distances_dict.keys())))
             #print(distances_dict)
 
-            
         for individual in next_generation:
             if not individual.model_name in list(distances_dict.keys()): continue
             distances = distances_dict[individual.model_name]
@@ -692,7 +744,7 @@ class CGP(object):
                 if i == k + 1: break
                 
             individual.novelty = knn_val/k
-            print('k = {}'.format(i))
+            print('k = {}'.format(i-1))
             print('novelty = {}'.format(individual.novelty))
         
         pickle.dump(self.search_archive, open('search_archive.p', 'wb'))
@@ -702,9 +754,8 @@ class CGP(object):
         return_dict = manager.dict()
 
         arguments = (
-        individual.active_net_list(), self.eval_func.batchsize, self.eval_func.input_shape, self.eval_func.target_shape,
-        return_dict)
-        p = multiprocessing.Process(target=get_model_memory_usage, args=arguments)
+        individual.active_net_list(), self.eval_func.batchsize, self.eval_func.input_shape, return_dict)
+        p = multiprocessing.Process(target=get_approximate_model_memory, args=arguments)
         p.start()
         p.join()
 
