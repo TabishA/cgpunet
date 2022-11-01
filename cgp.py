@@ -816,6 +816,9 @@ class CGP(object):
                     self.evaluate_novelty()
             else:
                 self.load_population(load_population, init_gen)
+                self.search_archive = pickle.load(open('search_archive.p'), 'rb')
+                mean_evals = pickle.load(open('./mean_evals.p'), 'rb')
+                max_evals = pickle.load(open('./max_evals.p'), 'rb')
 
             mean_fit, max_fit = self.get_stats(mode=mode)
             mean_evals.append(mean_fit)
