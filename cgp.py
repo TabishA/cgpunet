@@ -508,7 +508,7 @@ class CGP(object):
                     if fittest == None:
                         max_fitness = ind.eval
                         fittest = ind
-                    elif ind.novelty > fittest.novelty:
+                    elif ind.trainable_params < fittest.trainable_params or ind.novelty > fittest.novelty:
                         max_fitness = ind.eval
                         fittest = ind
 

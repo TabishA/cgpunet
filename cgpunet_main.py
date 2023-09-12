@@ -36,4 +36,4 @@ if __name__ == "__main__":
     
     #CGP object contains a population of pop_size individuals
     cgp = CGP(network_info, eval_f, max_eval=100, pop_size=20, lam=4, imgSize=128, init=False)
-    cgp.modified_evolution(mutation_rate=0.1)
+    cgp.modified_evolution(mutation_rate=0.1, load_population="./p_files_netlists/population_eval_85.p", init_gen=85)
